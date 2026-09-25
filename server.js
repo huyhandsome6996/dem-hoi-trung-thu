@@ -77,21 +77,7 @@ app.get('/api/config', (req, res) => {
 });
 
 app.post('/api/login', (req, res) => {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '?';
-  if (rateLimited(ip)) return res.status(429).json({ error: 'Bạn đang gửi quá nhanh, chờ chút rồi thử lại nha!' });
-
-  const name = String(req.body?.name ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().replace(/\s+/g, ' ').slice(0, 24);
-  const studentId = String(req.body?.studentId ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 20);
-  if (!name || !studentId) return res.status(400).json({ error: 'Điền đủ Họ tên và Mã sinh viên nha!' });
-
-  // nếu người này đã về đích ở lượt hiện tại → vẫn cho vào như khán giả
-  let row = store.upsertPlayer(arena.roundId, name, studentId);
-  const token = sign({ pid: row.id, rid: arena.roundId, exp: Date.now() + 12 * 3600 * 1000 });
-  res.json({
-    token,
-    player: { id: row.id, name: row.name, studentId: row.student_id, finishedRank: row.finish_rank || 0, champion: !!row.is_champion },
-    round: arena.roundId,
-  });
+  res.status(403).json({ error: 'Hết trung thu rồi cháu iu ơi' });
 });
 
 // ---------- REST: admin ----------
@@ -168,39 +154,8 @@ app.get('/api/admin/csv', adminAuth, (req, res) => {
 
 // ---------- Socket.IO ----------
 io.on('connection', (socket) => {
-  const payload = verify(String(socket.handshake.auth?.token || ''));
-  if (!payload || !payload.pid) { socket.emit('authError'); socket.disconnect(true); return; }
-
-  // row có thể thuộc lượt cũ (server vừa reset) → upsert sang lượt hiện tại
-  let row = store.db.prepare('SELECT * FROM players WHERE id = ?').get(payload.pid);
-  if (!row) { socket.emit('authError'); socket.disconnect(true); return; }
-  if (row.round_id !== arena.roundId) {
-    row = store.upsertPlayer(arena.roundId, row.name, row.student_id);
-  }
-  sessions.set(socket.id, { pid: row.id, rid: arena.roundId, name: row.name, studentId: row.student_id });
-
-  const ent = arena.addPlayer(row, socket.id);
-  socket.join('arena');
-  socket.emit('welcome', { youSid: socket.id, youId: ent.id, round: arena.roundId, champion: arena.champion ? { name: arena.champion.name } : null });
-  socket.emit('items', { its: arena.itemsList() }); // đồ vật gửi ngay lúc kết nối
-  io.to('arena').emit('ev', { k: 'join', name: ent.name });
-
-  // (v3) client tự di chuyển → gửi vị trí 12 lần/s; server kẹp hợp lệ rồi lưu
-  socket.on('pos', (d) => {
-    const s = sessions.get(socket.id);
-    if (!s) return;
-    arena.setPlayerPos(s.pid, d?.x, d?.y, d?.dx, d?.dy);
-  });
-
-  socket.on('disconnect', () => {
-    const s = sessions.get(socket.id);
-    if (s) {
-      const p = arena.players.get(s.pid);
-      if (p) p.disconnectedAt = Date.now();
-      sessions.delete(socket.id);
-      io.to('arena').emit('ev', { k: 'leave', name: s.name });
-    }
-  });
+  socket.emit('authError');
+  socket.disconnect(true);
 });
 
 // dọn người chơi mất kết nối quá 15s

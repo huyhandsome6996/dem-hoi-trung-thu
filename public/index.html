@@ -4,148 +4,164 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0e0b26">
-  <title>🏮 Đêm Hội Trung Thu — Pixel Race</title>
+  <title>🏮 Hết trung thu rồi cháu iu ơi 🥮</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏮</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400..700&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=3">
+  <link rel="stylesheet" href="/css/style.css?v=5">
+  <style>
+    .closed-wrap {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      text-align: center;
+      position: relative;
+      z-index: 2;
+    }
+    .closed-card {
+      background: var(--panel);
+      border: 4px solid var(--gold);
+      box-shadow: 0 0 0 4px var(--bg-mid), 0 10px 40px rgba(0, 0, 0, 0.6), 0 0 50px rgba(255, 210, 59, 0.25);
+      padding: 36px 24px;
+      max-width: 540px;
+      width: 92vw;
+      border-radius: 8px;
+      animation: pop-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    @keyframes pop-in {
+      from { transform: scale(0.85); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .closed-lanterns {
+      font-size: 54px;
+      margin-bottom: 12px;
+      animation: sway 2s ease-in-out infinite alternate;
+      display: inline-block;
+    }
+    @keyframes sway {
+      from { transform: rotate(-8deg) scale(1); }
+      to { transform: rotate(8deg) scale(1.05); }
+    }
+    .closed-title {
+      font-family: var(--font-pixel);
+      font-size: clamp(28px, 6.5vw, 42px);
+      color: var(--gold);
+      text-shadow: 0 0 20px rgba(255, 210, 59, 0.6), 0 3px 0 #7a3b12;
+      margin-bottom: 16px;
+      line-height: 1.25;
+    }
+    .closed-sub {
+      font-size: 22px;
+      color: var(--ink);
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+    .closed-note {
+      font-size: 18px;
+      color: var(--teal);
+      background: rgba(90, 214, 200, 0.1);
+      border: 2px dashed var(--teal);
+      padding: 10px 14px;
+      border-radius: 4px;
+      margin-bottom: 24px;
+    }
+    .music-btn {
+      font-family: var(--font-pixel);
+      font-size: 20px;
+      padding: 12px 24px;
+      cursor: pointer;
+    }
+    .closed-footer {
+      margin-top: 24px;
+      font-size: 16px;
+      color: var(--ink-dim);
+    }
+  </style>
 </head>
 <body>
-  <!-- Bầu trời trang trí (màn đăng nhập) -->
   <canvas id="bg-canvas" aria-hidden="true"></canvas>
 
-  <!-- ================= MÀN ĐĂNG NHẬP ================= -->
-  <section id="screen-login" class="screen">
-    <div class="login-wrap">
-      <div class="game-title">
-        <div class="title-sub">✦ ✦ ✦</div>
-        <h1>ĐÊM HỘI TRUNG THU</h1>
-        <div class="title-tag">PIXEL RACE · Thu thập lồng đèn · Né Lân!</div>
-        <div class="title-sub">✦ ✦ ✦</div>
+  <div class="closed-wrap">
+    <div class="closed-card">
+      <div class="closed-lanterns">🏮 🌕 🥮</div>
+      <h1 class="closed-title">Hết trung thu rồi cháu iu ơi</h1>
+      <p class="closed-sub">
+        Đêm hội Trung thu đã chính thức khép lại!<br>
+        Cảm ơn tất cả mọi người đã tham gia rước đèn, né Lân và phá cỗ thật vui.
+      </p>
+      <div class="closed-note">
+        ✨ Hẹn gặp lại các cháu vào mùa trăng rằm năm sau nha! ✨<br>
+        Chúc các cháu luôn chăm ngoan, học giỏi và ngủ ngon! ❤️
       </div>
-
-      <form id="login-form" class="card" autocomplete="off">
-        <label class="field">
-          <span>👤 Họ và tên</span>
-          <input id="in-name" name="name" maxlength="24" placeholder="Ví dụ: Nguyễn Văn A" required>
-        </label>
-        <label class="field">
-          <span>🎓 Mã sinh viên</span>
-          <input id="in-sid" name="studentId" maxlength="20" placeholder="Ví dụ: SV2026001" required>
-        </label>
-        <button type="submit" id="btn-login" class="btn btn-primary">🏮 VÀO HỘI NGAY</button>
-        <div id="login-err" class="login-err" hidden></div>
-        <div class="login-note">🎵 Mở loa lên nha — nhạc nền bài <b>Chiếc Đèn Ông Sao</b>!</div>
-        <div class="login-note" style="opacity:.85">🔐 Ban tổ chức: điền tên <b>Admin</b> + mật khẩu vào ô "Mã sinh viên" → tự động vào trang quản trị</div>
-      </form>
-
-      <div class="howto card">
-        <div class="howto-title">📜 CÁCH CHƠI</div>
-        <div class="howto-grid">
-          <div class="howto-item"><canvas class="mini" data-sprite="lantern" width="20" height="24"></canvas><span>Thu <b>10 lồng đèn</b> trên bản đồ</span></div>
-          <div class="howto-item"><canvas class="mini" data-sprite="star" width="26" height="26"></canvas><span>Đèn <b>ông sao</b> + nhiều điểm hơn</span></div>
-          <div class="howto-item"><canvas class="mini" data-sprite="mooncake" width="20" height="20"></canvas><span><b>Bánh trung thu</b> = chạy nhanh hơn</span></div>
-          <div class="howto-item"><canvas class="mini" data-sprite="drum" width="22" height="20"></canvas><span><b>Cái trống</b> = Lân sợ chạy mất</span></div>
-          <div class="howto-item"><canvas class="mini" data-sprite="lion" width="44" height="34"></canvas><span><b>NÉ con Lân!</b> (có ghi chữ LÂN trên đầu) — bị đụng là rớt đèn 😱</span></div>
-          <div class="howto-item"><canvas class="mini" data-sprite="gate" width="30" height="30"></canvas><span>Đủ đèn → chạy vào <b>CỔNG ĐÍCH</b></span></div>
-        </div>
-        <div class="howto-ctrl">🖥️ Máy tính: <b>WASD / phím mũi tên</b> (thoải mái dù bật hay tắt Unikey) &nbsp;·&nbsp; 📱 Điện thoại: <b>nút bấm D-Pad Lên / Xuống / Trái / Phải</b></div>
-        <div class="howto-race">🏁 Ai đủ 10 đèn và về đích <b>ĐẦU TIÊN</b> sẽ được vào khu vực Ban Tổ chức nhận quà!</div>
+      <div>
+        <button id="btn-play-music" class="btn btn-primary music-btn">🎵 Bật nhạc Chiếc Đèn Ông Sao</button>
       </div>
-
-      <div class="login-footer">
-        <span>Made with 🏮 cho đêm Trung thu</span>
-        <a href="/admin" class="admin-link">🔐 Admin</a>
+      <div class="closed-footer">
+        Đêm Hội Trung Thu — Pixel Race · Hẹn gặp lại năm sau! 🏮
       </div>
     </div>
-  </section>
+  </div>
 
-  <!-- ================= MÀN CHƠI ================= -->
-  <section id="screen-game" class="screen" hidden>
-    <div id="game-wrap">
-      <canvas id="game" width="480" height="272"></canvas>
-
-      <!-- HUD -->
-      <div id="hud" class="hidden">
-        <div id="hud-me" class="hud-card">
-          <div id="hud-name">👤 ...</div>
-          <div id="hud-progress">🏮 0/10</div>
-          <div id="hud-score">⭐ 0 điểm</div>
-          <div id="hud-bar-wrap"><div id="hud-bar"></div></div>
-        </div>
-        <div id="hud-standing" class="hud-card">
-          <div class="stand-title">🏆 BẢNG XẾP HẠNG</div>
-          <ol id="stand-list"></ol>
-        </div>
-        <div id="hud-btns">
-          <button id="btn-mute" class="btn-icon" title="Bật/tắt nhạc">🔊</button>
-          <button id="btn-fs" class="btn-icon" title="Toàn màn hình">⛶</button>
-        </div>
-        <div id="toasts"></div>
-        <div id="banner" hidden></div>
-      </div>
-
-      <!-- D-Pad điều khiển trên mobile (Lên, Xuống, Trái, Phải - bấm giữ, không vuốt) -->
-      <div id="mobile-dpad" class="mobile-dpad">
-        <button type="button" class="dpad-btn dpad-up" data-dir="up" aria-label="Lên">▲</button>
-        <button type="button" class="dpad-btn dpad-left" data-dir="left" aria-label="Trái">◀</button>
-        <div class="dpad-center">🏮</div>
-        <button type="button" class="dpad-btn dpad-right" data-dir="right" aria-label="Phải">▶</button>
-        <button type="button" class="dpad-btn dpad-down" data-dir="down" aria-label="Xuống">▼</button>
-      </div>
-
-      <!-- Gợi ý xoay ngang -->
-      <div id="rotate-hint" hidden>
-        <div class="card">📱 Xoay ngang màn hình để chơi đã hơn nha!<br><button id="btn-rotate-ok" class="btn btn-small">Đã biết, chơi tiếp ✋</button></div>
-      </div>
-
-      <!-- Overlay: chờ vào game -->
-      <div id="overlay-loading" class="overlay">
-        <div class="card loading-card">
-          <div class="loading-lantern">🏮</div>
-          <div>Đang vào đêm hội...</div>
-        </div>
-      </div>
-
-      <!-- Overlay: đã về đích (thường) -->
-      <div id="overlay-finish" class="overlay" hidden>
-        <div class="card finish-card">
-          <div class="finish-emoji">🎉</div>
-          <h2 id="finish-title">Bạn về đích!</h2>
-          <div id="finish-stats" class="finish-stats"></div>
-          <div id="finish-stand"></div>
-          <button id="btn-spectate" class="btn">👀 Xem tiếp cuộc đua</button>
-        </div>
-      </div>
-
-      <!-- Overlay: NGƯỜI CHIẾN THẮNG -->
-      <div id="overlay-champion" class="overlay" hidden>
-        <canvas id="confetti" aria-hidden="true"></canvas>
-        <div class="card champion-card">
-          <div class="champion-trophy">🏆</div>
-          <h2 class="champion-title">NGƯỜI CHIẾN THẮNG ĐẦU TIÊN!</h2>
-          <div id="champ-name" class="champ-name"></div>
-          <div class="champ-note">🎁 Bạn là người đầu tiên về đích — chỉ bạn được vào khu vực Ban Tổ chức trước để nhận quà!</div>
-          <a id="btn-admin-go" class="btn btn-primary" href="/admin">🏛️ VÀO GIAO DIỆN ADMIN NGAY</a>
-          <div class="champ-count">Tự động chuyển sau <span id="champ-count">8</span>s...</div>
-        </div>
-      </div>
-
-      <!-- Overlay: lỗi kết nối -->
-      <div id="overlay-error" class="overlay" hidden>
-        <div class="card">
-          <h2>⚠️ Mất kết nối</h2>
-          <div id="error-msg">Không gọi được máy chủ. Thử tải lại trang nha!</div>
-          <button id="btn-reload" class="btn btn-primary">🔄 Tải lại trang</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/sprites.js?v=2"></script>
   <script src="/js/audio.js?v=5"></script>
-  <script src="/js/game.js?v=7"></script>
+  <script>
+    // Canvas bầu trời đêm sao lấp lánh
+    const cv = document.getElementById('bg-canvas');
+    const ctx = cv.getContext('2d');
+    const stars = Array.from({ length: 60 }, () => ({
+      x: Math.random(),
+      y: Math.random() * 0.7,
+      s: Math.random() * 2 + 1,
+      speed: Math.random() * 0.002 + 0.001
+    }));
+    function drawSky(t) {
+      if (cv.width !== innerWidth || cv.height !== innerHeight) {
+        cv.width = innerWidth;
+        cv.height = innerHeight;
+      }
+      ctx.fillStyle = '#0e0b26';
+      ctx.fillRect(0, 0, cv.width, cv.height);
+
+      // Mặt trăng tròn
+      const mx = cv.width * 0.85, my = 80, mr = 40;
+      const grad = ctx.createRadialGradient(mx, my, mr * 0.2, mx, my, mr * 2);
+      grad.addColorStop(0, 'rgba(255, 235, 150, 0.4)');
+      grad.addColorStop(1, 'rgba(255, 235, 150, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(mx, my, mr * 2, 0, Math.PI * 2); ctx.fill();
+
+      ctx.fillStyle = '#fff4bd';
+      ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2); ctx.fill();
+
+      // Sao lấp lánh
+      stars.forEach(st => {
+        const alpha = 0.3 + 0.7 * Math.abs(Math.sin(t * st.speed));
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.fillRect(st.x * cv.width, st.y * cv.height, st.s, st.s);
+      });
+
+      requestAnimationFrame(drawSky);
+    }
+    requestAnimationFrame(drawSky);
+
+    // Phát nhạc nếu bấm nút
+    const btn = document.getElementById('btn-play-music');
+    let playing = false;
+    btn.addEventListener('click', () => {
+      if (!playing) {
+        AudioManager.ensureCtx();
+        AudioManager.startMusic();
+        btn.textContent = '🔊 Đang phát: Chiếc Đèn Ông Sao';
+        playing = true;
+      } else {
+        const muted = !AudioManager.isMuted();
+        AudioManager.setMuted(muted);
+        btn.textContent = muted ? '🔇 Đã tắt nhạc' : '🔊 Đang phát: Chiếc Đèn Ông Sao';
+      }
+    });
+  </script>
 </body>
 </html>
