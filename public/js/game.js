@@ -18,7 +18,37 @@
   let SPR = null;          // sprites
   let mySid = null, myId = null;
   let token = sessionStorage.getItem('tt_token') || null;
-  const fx = [];           // hiệu ứng nhỏ (sparkle, !, ...)
+
+  // ============ DSA: PARTICLE OBJECT POOL (giảm thiểu rác GC, chống lag) ============
+  class ParticlePool {
+    constructor(capacity = 120) {
+      this.pool = new Array(capacity);
+      for (let i = 0; i < capacity; i++) {
+        this.pool[i] = { active: false, type: '', x: 0, y: 0, t: 0, color: '' };
+      }
+      this.head = 0;
+    }
+    spawn(type, x, y, t, color = '') {
+      for (let i = 0; i < this.pool.length; i++) {
+        const idx = (this.head + i) % this.pool.length;
+        const p = this.pool[idx];
+        if (!p.active) {
+          p.active = true; p.type = type; p.x = x; p.y = y; p.t = t; p.color = color;
+          this.head = (idx + 1) % this.pool.length;
+          return p;
+        }
+      }
+      const p = this.pool[this.head];
+      p.active = true; p.type = type; p.x = x; p.y = y; p.t = t; p.color = color;
+      this.head = (this.head + 1) % this.pool.length;
+      return p;
+    }
+    clear() {
+      for (let i = 0; i < this.pool.length; i++) this.pool[i].active = false;
+    }
+  }
+  const fx = new ParticlePool(120);
+
   let shakeT = 0;
   let running = false;
   let skyRunning = true;
@@ -188,67 +218,141 @@
     }
   }
 
-  // ============ INPUT ============
-  const keys = {};
+  // ============ INPUT & UNIKEY TIẾNG VIỆT RESILIENCE ============
+  // Hỗ trợ mượt mà khi bật Unikey (Telex / VNI) lẫn tiếng Anh:
+  // 1. Dùng e.code ('KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp'...) không đổi theo bộ gõ
+  // 2. Fallback map ký tự tiếng Việt Telex/VNI ('ư', 'â', 'ă', 'á', 'à', 'đ'...)
+  // 3. Quản lý trạng thái hướng độc lập, reset khi blur
+  const keyDirs = { up: false, down: false, left: false, right: false };
+  const dpadDirs = { up: false, down: false, left: false, right: false };
+
+  function parseDirection(e) {
+    const code = e.code || '';
+    const key = (e.key || '').toLowerCase();
+
+    // LÊN (W hoặc ArrowUp, hỗ trợ Telex 'ư', 'Ư')
+    if (code === 'KeyW' || code === 'ArrowUp' || key === 'w' || key === 'ư' || key === 'arrowup') {
+      return 'up';
+    }
+    // XUỐNG (S hoặc ArrowDown)
+    if (code === 'KeyS' || code === 'ArrowDown' || key === 's' || key === 'arrowdown') {
+      return 'down';
+    }
+    // TRÁI (A hoặc ArrowLeft, hỗ trợ Telex 'â', 'ă', 'á', 'à'...)
+    if (code === 'KeyA' || code === 'ArrowLeft' ||
+        key === 'a' || key === 'â' || key === 'ă' || key === 'á' || key === 'à' ||
+        key === 'ả' || key === 'ã' || key === 'ạ' || key === 'arrowleft') {
+      return 'left';
+    }
+    // PHẢI (D hoặc ArrowRight, hỗ trợ Telex 'đ', 'Đ')
+    if (code === 'KeyD' || code === 'ArrowRight' || key === 'd' || key === 'đ' || key === 'arrowright') {
+      return 'right';
+    }
+    return null;
+  }
+
+  function isTypingInInput() {
+    const el = document.activeElement;
+    return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+  }
+
   addEventListener('keydown', (e) => {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
-    keys[e.key.toLowerCase()] = true;
+    if (isTypingInInput()) return;
+    const dir = parseDirection(e);
+    if (dir) {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key) ||
+          ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
+        e.preventDefault();
+      }
+      keyDirs[dir] = true;
+    }
   });
-  addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
-  const joy = { active: false, id: null, ox: 0, oy: 0, dx: 0, dy: 0 };
-  const joyBase = $('#joy-base'), joyKnob = $('#joy-knob');
+  addEventListener('keyup', (e) => {
+    if (isTypingInInput()) return;
+    const dir = parseDirection(e);
+    if (dir) {
+      keyDirs[dir] = false;
+    }
+  });
+
+  // Chống kẹt phím khi người chơi Alt+Tab hoặc mất focus cửa sổ
+  window.addEventListener('blur', () => {
+    keyDirs.up = false; keyDirs.down = false; keyDirs.left = false; keyDirs.right = false;
+    dpadDirs.up = false; dpadDirs.down = false; dpadDirs.left = false; dpadDirs.right = false;
+    document.querySelectorAll('.dpad-btn').forEach(b => b.classList.remove('active'));
+  });
+
+  // ============ D-PAD TRÊN MOBILE (BẤM GIỮ, KHÔNG VUỐT) ============
+  const dpad = $('#mobile-dpad');
+  if (dpad) {
+    const bindDpadBtn = (btn) => {
+      const dir = btn.dataset.dir;
+      if (!dir) return;
+
+      const handlePress = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        dpadDirs[dir] = true;
+        btn.classList.add('active');
+        if (navigator.vibrate) navigator.vibrate(10);
+      };
+
+      const handleRelease = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        dpadDirs[dir] = false;
+        btn.classList.remove('active');
+      };
+
+      btn.addEventListener('touchstart', handlePress, { passive: false });
+      btn.addEventListener('touchend', handleRelease, { passive: false });
+      btn.addEventListener('touchcancel', handleRelease, { passive: false });
+      btn.addEventListener('mousedown', handlePress);
+      btn.addEventListener('mouseup', handleRelease);
+      btn.addEventListener('mouseleave', handleRelease);
+    };
+
+    dpad.querySelectorAll('.dpad-btn').forEach(bindDpadBtn);
+
+    // Hỗ trợ di chuyển ngón tay mượt mà giữa các nút D-Pad
+    dpad.addEventListener('touchmove', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const touches = ev.targetTouches;
+      const activeDirsFromTouch = new Set();
+      for (let i = 0; i < touches.length; i++) {
+        const el = document.elementFromPoint(touches[i].clientX, touches[i].clientY);
+        const btn = el ? el.closest('.dpad-btn') : null;
+        if (btn && btn.dataset.dir) {
+          activeDirsFromTouch.add(btn.dataset.dir);
+        }
+      }
+      ['up', 'down', 'left', 'right'].forEach((d) => {
+        dpadDirs[d] = activeDirsFromTouch.has(d);
+        const btn = dpad.querySelector(`.dpad-${d}`);
+        if (btn) btn.classList.toggle('active', dpadDirs[d]);
+      });
+    }, { passive: false });
+  }
+
+  // Chặn thao tác vuốt trượt màn hình khi đang chơi trên mobile (không vuốt)
   const gameWrap = $('#game-wrap');
+  if (gameWrap) {
+    gameWrap.addEventListener('touchmove', (e) => {
+      if (!e.target.closest('#screen-login, .overlay, #stand-list')) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+  }
 
-  function joyStart(e) {
-    const t = e.changedTouches ? e.changedTouches[0] : e;
-    if (t.target.closest('.hud-card, .btn-icon, .overlay, #rotate-hint')) return;
-    joy.active = true; joy.id = t.identifier ?? 'mouse';
-    joy.ox = t.clientX; joy.oy = t.clientY;
-    joyBase.style.display = 'block';
-    joyBase.style.left = (t.clientX - 52) + 'px';
-    joyBase.style.top = (t.clientY - 52) + 'px';
-    joyMove(e);
-  }
-  function joyMove(e) {
-    if (!joy.active) return;
-    const list = e.changedTouches ? Array.from(e.changedTouches) : [e];
-    for (const t of list) {
-      if ((t.identifier ?? 'mouse') !== joy.id) continue;
-      let dx = t.clientX - joy.ox, dy = t.clientY - joy.oy;
-      const d = Math.hypot(dx, dy);
-      const max = 44;
-      if (d > max) { dx = dx / d * max; dy = dy / d * max; }
-      joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
-      joy.dx = Math.abs(dx) > 8 ? dx / max : 0;
-      joy.dy = Math.abs(dy) > 8 ? dy / max : 0;
-    }
-  }
-  function joyEnd(e) {
-    const list = e.changedTouches ? Array.from(e.changedTouches) : [e];
-    for (const t of list) {
-      if ((t.identifier ?? 'mouse') !== joy.id) continue;
-      joy.active = false; joy.dx = 0; joy.dy = 0;
-      joyKnob.style.transform = '';
-      joyBase.style.display = 'none';
-    }
-  }
-  gameWrap.addEventListener('touchstart', joyStart, { passive: true });
-  gameWrap.addEventListener('touchmove', joyMove, { passive: true });
-  gameWrap.addEventListener('touchend', joyEnd);
-  gameWrap.addEventListener('touchcancel', joyEnd);
-  gameWrap.addEventListener('mousedown', joyStart);
-  addEventListener('mousemove', joyMove);
-  addEventListener('mouseup', joyEnd);
-
-  // đọc input từ bàn phím + joystick
+  // Đọc input từ bàn phím + nút bấm D-Pad mobile
   function readInput() {
     let dx = 0, dy = 0;
-    if (keys['a'] || keys['arrowleft']) dx -= 1;
-    if (keys['d'] || keys['arrowright']) dx += 1;
-    if (keys['w'] || keys['arrowup']) dy -= 1;
-    if (keys['s'] || keys['arrowdown']) dy += 1;
-    if (joy.active && (joy.dx || joy.dy)) { dx = joy.dx; dy = joy.dy; }
+    if (keyDirs.left || dpadDirs.left) dx -= 1;
+    if (keyDirs.right || dpadDirs.right) dx += 1;
+    if (keyDirs.up || dpadDirs.up) dy -= 1;
+    if (keyDirs.down || dpadDirs.down) dy += 1;
     return { dx, dy };
   }
 
@@ -318,20 +422,20 @@
         if (ev.name) { toast(`👋 ${ev.name} đã vào hội`, 'info', 1800); AudioManager.play('join'); }
         break;
       case 'collect': {
-        fx.push({ type: 'spark', x: ev.x, y: ev.y, t: performance.now(), color: ev.type === 'star' ? '#ffd23b' : '#ff7a3c' });
+        fx.spawn('spark', ev.x, ev.y, performance.now(), ev.type === 'star' ? '#ffd23b' : '#ff7a3c');
         if (mine) AudioManager.play(ev.type === 'star' ? 'star' : 'collect');
         else if (ev.type === 'star') AudioManager.play('star');
         break;
       }
       case 'power':
-        fx.push({ type: 'spark', x: ev.x, y: ev.y, t: performance.now(), color: '#d9a05b' });
+        fx.spawn('spark', ev.x, ev.y, performance.now(), '#d9a05b');
         if (mine) {
           AudioManager.play('power'); toast('🥮 Bánh trung thu — tăng tốc 5 giây!', 'good');
           selfBoostUntil = performance.now() + (CFG?.RULES?.BOOST_MS || 5000); // mô phỏng local
         }
         break;
       case 'drum':
-        fx.push({ type: 'ring', x: ev.x, y: ev.y, t: performance.now() });
+        fx.spawn('ring', ev.x, ev.y, performance.now());
         AudioManager.play('drum');
         toast(`🥁 ${ev.name} đánh trống — Lân bỏ chạy!`, 'good');
         break;
@@ -340,7 +444,7 @@
         else toast(`⚡ ${ev.name} đã đủ đèn — đang lao lên cổng!`, 'warn');
         break;
       case 'hit': {
-        fx.push({ type: 'burst', x: ev.x, y: ev.y, t: performance.now() });
+        fx.spawn('burst', ev.x, ev.y, performance.now());
         if (mine) {
           AudioManager.play('hit');
           shakeT = 0.28;
@@ -354,7 +458,7 @@
         break;
       }
       case 'lionTelegraph':
-        fx.push({ type: 'excl', x: ev.x, y: ev.y - 14, t: performance.now() });
+        fx.spawn('excl', ev.x, ev.y - 14, performance.now());
         break;
       case 'finish': {
         AudioManager.play(ev.champion ? 'champion' : 'finish');
@@ -377,6 +481,7 @@
         ghost.finished = false;
         selfStunUntil = 0; selfBoostUntil = 0;
         items = [];
+        fx.clear();
         snaps.clear();
         updateHud._last = null;
         break;
@@ -541,8 +646,9 @@
     const myProgress = meEnt ? meEnt[5] : 0;
     Sprites.drawGate(cx, CFG.GATE.x - 10, CFG.GATE.y - 26, myProgress >= CFG.RULES.TARGET_LANTERNS, t);
 
-    // đồ vật (kênh riêng 'items' — event-driven)
+    // đồ vật (kênh riêng 'items' — event-driven + Viewport Culling DSA)
     for (const it of items) {
+      if (it[2] < -16 || it[2] > 496 || it[3] < -16 || it[3] > 288) continue;
       const type = CFG.ITEM_TYPES[it[1]];
       const spr = SPR.items[type];
       if (!spr) continue;
@@ -556,11 +662,12 @@
       cx.drawImage(spr, x, y);
     }
 
-    // hiệu ứng fx
-    for (let i = fx.length - 1; i >= 0; i--) {
-      const f = fx[i];
+    // hiệu ứng fx từ ParticlePool (DSA: Object Pool — 0 lần cấp phát mảng, 0 GC pause)
+    for (let i = 0; i < fx.pool.length; i++) {
+      const f = fx.pool[i];
+      if (!f.active) continue;
       const age = t - f.t;
-      if (age > 700) { fx.splice(i, 1); continue; }
+      if (age > 700) { f.active = false; continue; }
       if (f.type === 'spark') {
         cx.fillStyle = f.color;
         const rr = age / 90;
@@ -779,6 +886,16 @@
     AudioManager.startMusic();
     checkRotate();
     connect();
+
+    // Tự động mở khóa âm thanh nếu bị trình duyệt mobile chặn autoplay
+    const unlockAudio = () => {
+      AudioManager.ensureCtx();
+      AudioManager.startMusic();
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('click', unlockAudio);
+    };
+    window.addEventListener('touchstart', unlockAudio, { passive: true });
+    window.addEventListener('click', unlockAudio, { passive: true });
   }
 
   boot();

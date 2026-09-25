@@ -42,7 +42,7 @@ function moveWithCollision(ent, dx, dy, r) {
 
 class Item {
   constructor(id, type, x, y) {
-    this.id = id; this.type = type; this.x = x; this.y = y;
+    this.id = id; this.type = type; this.typeIdx = ITEM_TYPES.indexOf(type); this.x = x; this.y = y;
     this.active = true; this.respawnAt = 0;
   }
 }
@@ -52,6 +52,7 @@ class Item {
 //  Chia bản đồ thành ô lưới 32px; mỗi đồ vật nằm trong 1 bucket.
 //  Khi kiểm tra "nhặt đồ", chỉ cần nhìn vào bucket quanh người chơi
 //  thay vì quét qua TẤT CẢ đồ vật trên bản đồ (O(n) → O(1)).
+//  Hỗ trợ insert() và remove() O(1) không cần rebuild toàn bộ.
 // ============================================================
 class SpatialHash {
   constructor(cell = 32) {
@@ -59,13 +60,29 @@ class SpatialHash {
     this.buckets = new Map();
   }
   _key(cx, cy) { return cx * 1024 + cy; }
+  insert(it) {
+    if (!it.active) return;
+    const k = this._key(Math.floor(it.x / this.cell), Math.floor(it.y / this.cell));
+    it._k = k;
+    let arr = this.buckets.get(k);
+    if (!arr) { arr = []; this.buckets.set(k, arr); }
+    arr.push(it);
+  }
+  remove(it) {
+    if (it._k === undefined) return;
+    const arr = this.buckets.get(it._k);
+    if (arr) {
+      const idx = arr.indexOf(it);
+      if (idx !== -1) arr.splice(idx, 1);
+      if (arr.length === 0) this.buckets.delete(it._k);
+    }
+    it._k = undefined;
+  }
   rebuild(list) {
     this.buckets.clear();
     for (const it of list) {
       if (!it.active) continue;
-      const k = this._key(Math.floor(it.x / this.cell), Math.floor(it.y / this.cell));
-      const arr = this.buckets.get(k);
-      if (arr) arr.push(it); else this.buckets.set(k, [it]);
+      this.insert(it);
     }
   }
   // trả các đồ vật trong các bucket chạm vùng bán kính r quanh (x, y)
@@ -77,7 +94,9 @@ class SpatialHash {
     for (let cx = x0; cx <= x1; cx++) {
       for (let cy = y0; cy <= y1; cy++) {
         const arr = this.buckets.get(this._key(cx, cy));
-        if (arr) for (const it of arr) out.push(it);
+        if (arr) {
+          for (let i = 0; i < arr.length; i++) out.push(arr[i]);
+        }
       }
     }
     return out;
@@ -133,9 +152,10 @@ class Arena {
     this.finishCount = 0;
     this.champion = null;
     this.items = [];
+    this.itemHash.buckets.clear();
     for (let i = 0; i < RULES.MAX_ITEMS_ON_MAP; i++) this.spawnItem(true);
     this.lions = C.LION_SPAWNS.map(([x, y], i) => new Lion(i, x, y));
-    //-reset người chơi đang kết nối
+    // reset người chơi đang kết nối
     for (const p of this.players.values()) {
       const sp = this.pickSpawn();
       p.x = sp[0]; p.y = sp[1];
@@ -176,7 +196,8 @@ class Arena {
       const item = new Item(this.nextItemId++, pickItemType(), x, y);
       item.spot = idx;
       this.items.push(item);
-      this.itemsDirty = true; // lưới không gian cần dựng lại
+      this.itemHash.insert(item);
+      this.itemsChanged = true;
       return item;
     }
   }
@@ -258,7 +279,9 @@ class Arena {
         if (dist2(p.x, p.y, it.x, it.y) <= RULES.PICKUP_RADIUS ** 2) {
           it.active = false;
           it.respawnAt = t + RULES.ITEM_RESPAWN_MS;
+          this.itemHash.remove(it);
           this.itemsDirty = true;
+          this.itemsChanged = true;
           if (it.type === 'lantern' || it.type === 'star') {
             p.progress += 1;
             p.score += SCORE[it.type];
@@ -377,9 +400,8 @@ class Arena {
       const activeCount = this.items.filter(it => it.active).length;
       if (activeCount < RULES.MAX_ITEMS_ON_MAP && Math.random() < 0.35) this.spawnItem();
     }
-    // đồ vật vừa thay đổi → dựng lại lưới không gian + báo server gửi sự kiện items
+    // đồ vật vừa thay đổi → báo server gửi sự kiện items (SpatialHash đã được cập nhật trực tiếp O(1))
     if (this.itemsDirty) {
-      this.itemHash.rebuild(this.items);
       this.itemsDirty = false;
       this.itemsChanged = true;
     }
@@ -405,7 +427,7 @@ class Arena {
     p.progress -= drop;
     for (let i = 0; i < drop; i++) {
       const it = this.spawnItem();
-      if (it) { it.type = 'lantern'; }
+      if (it) { it.type = 'lantern'; it.typeIdx = ITEM_TYPES.indexOf('lantern'); }
     }
     // bật lùi nhẹ
     const ang = Math.atan2(p.y - l.y, p.x - l.x);
@@ -440,7 +462,7 @@ class Arena {
   itemsList() {
     const out = [];
     for (const it of this.items) {
-      if (it.active) out.push([it.id, ITEM_TYPES.indexOf(it.type), it.x, it.y]);
+      if (it.active) out.push([it.id, it.typeIdx !== undefined ? it.typeIdx : ITEM_TYPES.indexOf(it.type), it.x, it.y]);
     }
     return out;
   }

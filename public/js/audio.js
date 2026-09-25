@@ -77,25 +77,42 @@ const AudioManager = (() => {
     if (ctx.state === 'suspended') ctx.resume();
   }
 
+  let bgmAudio = null;
+
   // ---------- nhạc nền ----------
   async function startMusic() {
-    if (started) return;
+    if (started && bgmAudio && !bgmAudio.paused) return;
     started = true;
     ensureCtx();
-    // thử MP3 bản thu gốc trước (v=2 để phá cache bản cũ nếu có)
+    // Ưu tiên phát file MP3 chiếc đèn ông sao người dùng gửi
     try {
-      const res = await fetch('/audio/den-ong-sao.mp3?v=2', { cache: 'default' });
-      if (res.ok) {
-        const buf = await ctx.decodeAudioData(await res.arrayBuffer());
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        src.loop = true;
-        src.connect(musicGain);
-        src.start();
-        return; // thành công → không cần chiptune
+      if (!bgmAudio) {
+        bgmAudio = new Audio('/audio/den-ong-sao.mp3');
+        bgmAudio.loop = true;
+        bgmAudio.preload = 'auto';
+        bgmAudio.volume = muted ? 0 : 0.45;
       }
-    } catch (e) { /* rơi xuống chiptune */ }
-    startChiptune();
+      const playPromise = bgmAudio.play();
+      if (playPromise !== undefined) {
+        await playPromise;
+      }
+      return; // thành công phát MP3
+    } catch (e) {
+      console.warn('HTML5 Audio phát gặp lỗi hoặc bị chặn autoplay, thử Web Audio...', e);
+      try {
+        const res = await fetch('/audio/den-ong-sao.mp3');
+        if (res.ok) {
+          const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.loop = true;
+          src.connect(musicGain);
+          src.start();
+          return;
+        }
+      } catch (err2) { /* fallback chiptune */ }
+      startChiptune();
+    }
   }
 
   function startChiptune() {
@@ -198,6 +215,10 @@ const AudioManager = (() => {
     muted = m;
     localStorage.setItem('tt_mute', m ? '1' : '0');
     if (master) master.gain.value = m ? 0 : 1;
+    if (bgmAudio) {
+      bgmAudio.muted = m;
+      bgmAudio.volume = m ? 0 : 0.45;
+    }
   }
   function isMuted() { return muted; }
 

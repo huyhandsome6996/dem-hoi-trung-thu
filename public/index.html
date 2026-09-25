@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400..700&family=VT323&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=2">
+  <link rel="stylesheet" href="/css/style.css?v=3">
 </head>
 <body>
   <!-- Bầu trời trang trí (màn đăng nhập) -->
@@ -50,7 +50,7 @@
           <div class="howto-item"><canvas class="mini" data-sprite="lion" width="44" height="34"></canvas><span><b>NÉ con Lân!</b> (có ghi chữ LÂN trên đầu) — bị đụng là rớt đèn 😱</span></div>
           <div class="howto-item"><canvas class="mini" data-sprite="gate" width="30" height="30"></canvas><span>Đủ đèn → chạy vào <b>CỔNG ĐÍCH</b></span></div>
         </div>
-        <div class="howto-ctrl">🖥️ Máy tính: <b>WASD / phím mũi tên</b> &nbsp;·&nbsp; 📱 Điện thoại: <b>joystick cảm ứng</b> (chạm màn hình)</div>
+        <div class="howto-ctrl">🖥️ Máy tính: <b>WASD / phím mũi tên</b> (thoải mái dù bật hay tắt Unikey) &nbsp;·&nbsp; 📱 Điện thoại: <b>nút bấm D-Pad Lên / Xuống / Trái / Phải</b></div>
         <div class="howto-race">🏁 Ai đủ 10 đèn và về đích <b>ĐẦU TIÊN</b> sẽ được vào khu vực Ban Tổ chức nhận quà!</div>
       </div>
 
@@ -86,9 +86,13 @@
         <div id="banner" hidden></div>
       </div>
 
-      <!-- Joystick cảm ứng -->
-      <div id="joystick" class="hidden">
-        <div id="joy-base"><div id="joy-knob"></div></div>
+      <!-- D-Pad điều khiển trên mobile (Lên, Xuống, Trái, Phải - bấm giữ, không vuốt) -->
+      <div id="mobile-dpad" class="mobile-dpad">
+        <button type="button" class="dpad-btn dpad-up" data-dir="up" aria-label="Lên">▲</button>
+        <button type="button" class="dpad-btn dpad-left" data-dir="left" aria-label="Trái">◀</button>
+        <div class="dpad-center">🏮</div>
+        <button type="button" class="dpad-btn dpad-right" data-dir="right" aria-label="Phải">▶</button>
+        <button type="button" class="dpad-btn dpad-down" data-dir="down" aria-label="Xuống">▼</button>
       </div>
 
       <!-- Gợi ý xoay ngang -->
@@ -141,7 +145,7 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/sprites.js?v=2"></script>
-  <script src="/js/audio.js?v=4"></script>
-  <script src="/js/game.js?v=6"></script>
+  <script src="/js/audio.js?v=5"></script>
+  <script src="/js/game.js?v=7"></script>
 </body>
 </html>
