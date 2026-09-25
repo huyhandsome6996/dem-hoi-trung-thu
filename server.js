@@ -1,5 +1,6 @@
 // ============================================================
 //  ĐÊM HỘI TRUNG THU — Server (Express + Socket.IO + SQLite)
+//  v3: client-authoritative movement + Spatial Hash + kênh items riêng
 //  Chạy: node server.js   (PORT mặc định 3000)
 // ============================================================
 'use strict';
@@ -22,7 +23,7 @@ const ADMIN_PASSWORDS = new Set([
   ...(process.env.ADMIN_PASSWORDS || '').split(',').map(s => s.trim()).filter(Boolean),
   ...(process.env.ADMIN_PASSWORD ? [process.env.ADMIN_PASSWORD] : []),
 ]);
-const VERSION = 2;
+const VERSION = 3;
 const SECRET = process.env.SESSION_SECRET || 'trung-thu-2026-den-ong-sao-secret';
 
 const app = express();
@@ -181,12 +182,14 @@ io.on('connection', (socket) => {
   const ent = arena.addPlayer(row, socket.id);
   socket.join('arena');
   socket.emit('welcome', { youSid: socket.id, youId: ent.id, round: arena.roundId, champion: arena.champion ? { name: arena.champion.name } : null });
+  socket.emit('items', { its: arena.itemsList() }); // đồ vật gửi ngay lúc kết nối
   io.to('arena').emit('ev', { k: 'join', name: ent.name });
 
-  socket.on('input', (data) => {
-    const dx = Number(data?.dx) || 0;
-    const dy = Number(data?.dy) || 0;
-    arena.setPlayerInput(sessions.get(socket.id)?.pid, dx, dy);
+  // (v3) client tự di chuyển → gửi vị trí 12 lần/s; server kẹp hợp lệ rồi lưu
+  socket.on('pos', (d) => {
+    const s = sessions.get(socket.id);
+    if (!s) return;
+    arena.setPlayerPos(s.pid, d?.x, d?.y, d?.dx, d?.dy);
   });
 
   socket.on('disconnect', () => {
@@ -232,9 +235,14 @@ setInterval(() => {
       if (p) store.updateProgress(p.id, p.progress, p.score, p.hits);
     }
   }
+  // đồ vật chỉ broadcast KHI THAY ĐỔI (event-driven) — không gửi kèm mỗi snapshot
+  if (arena.itemsChanged) {
+    arena.itemsChanged = false;
+    io.to('arena').emit('items', { its: arena.itemsList() });
+  }
 }, TICK_MS);
 
-// snapshot 15Hz
+// snapshot 15Hz — (v3) đã nhẹ hơn: chỉ người chơi + Lân, không kèm đồ vật
 setInterval(() => {
   if (io.sockets.adapter.rooms.get('arena')?.size) {
     io.to('arena').emit('snap', arena.snapshot());

@@ -1,6 +1,9 @@
 // ============================================================
-//  ĐÊM HỘI TRUNG THU — Arena: mô phỏng game (server-authoritative)
-//  Người chơi di chuyển, nhặt đèn, né Lân, về đích. Server là "trọng tài".
+//  ĐÊM HỘI TRUNG THU — Arena: mô phỏng game (v3 — mượt hơn nhờ DSA)
+//  · Người chơi TỰ di chuyển ở máy mình (client-authoritative, độ trễ input = 0)
+//    → gửi vị trí lên server 12 lần/s; server chỉ kẹp giới hạn + tính điểm
+//  · Spatial Hash Grid: tra cứu đồ vật gần người chơi O(1) thay vì quét toàn bản đồ
+//  · Đồ vật chỉ gửi qua mạng KHI THAY ĐỔI (event-driven), snapshot nhẹ hơn ~40%
 // ============================================================
 'use strict';
 
@@ -44,6 +47,43 @@ class Item {
   }
 }
 
+// ============================================================
+//  SPATIAL HASH GRID — Cấu trúc dữ liệu tra cứu không gian O(1)
+//  Chia bản đồ thành ô lưới 32px; mỗi đồ vật nằm trong 1 bucket.
+//  Khi kiểm tra "nhặt đồ", chỉ cần nhìn vào bucket quanh người chơi
+//  thay vì quét qua TẤT CẢ đồ vật trên bản đồ (O(n) → O(1)).
+// ============================================================
+class SpatialHash {
+  constructor(cell = 32) {
+    this.cell = cell;
+    this.buckets = new Map();
+  }
+  _key(cx, cy) { return cx * 1024 + cy; }
+  rebuild(list) {
+    this.buckets.clear();
+    for (const it of list) {
+      if (!it.active) continue;
+      const k = this._key(Math.floor(it.x / this.cell), Math.floor(it.y / this.cell));
+      const arr = this.buckets.get(k);
+      if (arr) arr.push(it); else this.buckets.set(k, [it]);
+    }
+  }
+  // trả các đồ vật trong các bucket chạm vùng bán kính r quanh (x, y)
+  query(x, y, r, out) {
+    out.length = 0;
+    const c = this.cell;
+    const x0 = Math.floor((x - r) / c), x1 = Math.floor((x + r) / c);
+    const y0 = Math.floor((y - r) / c), y1 = Math.floor((y + r) / c);
+    for (let cx = x0; cx <= x1; cx++) {
+      for (let cy = y0; cy <= y1; cy++) {
+        const arr = this.buckets.get(this._key(cx, cy));
+        if (arr) for (const it of arr) out.push(it);
+      }
+    }
+    return out;
+  }
+}
+
 class Lion {
   constructor(id, x, y) {
     this.id = id; this.x = x; this.y = y;
@@ -79,6 +119,9 @@ class Arena {
     this.players = new Map();         // playerId -> entity
     this.items = [];
     this.lions = [];
+    this.itemHash = new SpatialHash(32); // DSA: lưới không gian cho đồ vật
+    this._near = [];                     // buffer tái sử dụng khi query (giảm GC)
+    this.itemsChanged = true;            // cờ "đồ vật đã đổi" → server gửi sự kiện items
     this.nextItemId = 1;
     this.finishCount = 0;
     this.champion = null;             // entity đã về đích đầu tiên
@@ -99,8 +142,10 @@ class Arena {
       p.progress = 0; p.score = 0; p.hits = 0;
       p.stunnedUntil = 0; p.invulnUntil = now() + RULES.SPAWN_INVULN_MS;
       p.boostUntil = 0; p.finishedRank = 0; p.champion = false;
+      p.trustNext = true; p.lastPosT = 0;
       p.roundId = roundId;
     }
+    this.itemsChanged = true;
   }
 
   pickSpawn() {
@@ -131,6 +176,7 @@ class Arena {
       const item = new Item(this.nextItemId++, pickItemType(), x, y);
       item.spot = idx;
       this.items.push(item);
+      this.itemsDirty = true; // lưới không gian cần dựng lại
       return item;
     }
   }
@@ -154,6 +200,8 @@ class Arena {
       invulnUntil: now() + RULES.SPAWN_INVULN_MS,
       boostUntil: 0,
       input: { dx: 0, dy: 0 },
+      trustNext: true,   // chấp nhận vị trí đầu tiên không bị kẹp tốc độ
+      lastPosT: 0,       // mốc thời gian gói pos trước (để chống dịch chuyển bất hợp lệ)
       lastSeen: now(),
     };
     if (p.finishedRank) p.finishedRank = row.finish_rank; // về đích rồi → đứng cổng cổ vũ
@@ -163,42 +211,54 @@ class Arena {
 
   removePlayer(playerId) { this.players.delete(playerId); }
 
-  setPlayerInput(playerId, dx, dy) {
+  /**
+   * Nhận vị trí người chơi tự báo từ client (client-authoritative).
+   * Server vẫn "kẹp" hợp lệ: đúng biên bản đồ, không dịch chuyển nhanh hơn
+   * tốc độ tối đa cho phép (chống hack teleport), bỏ qua khi đang choáng.
+   */
+  setPlayerPos(playerId, x, y, dx, dy) {
     const p = this.players.get(playerId);
-    if (!p) return;
-    p.input.dx = Math.max(-1, Math.min(1, dx));
-    p.input.dy = Math.max(-1, Math.min(1, dy));
+    if (!p || p.finishedRank) return;
+    const t = now();
+    if (t < p.stunnedUntil) return; // đang choáng → server giữ nguyên vị trí
+    x = Math.max(6, Math.min(C.W - 6, Number(x) || 0));
+    y = Math.max(6, Math.min(C.H - 6, Number(y) || 0));
+    const dtS = p.lastPosT ? Math.min(1, (t - p.lastPosT) / 1000) : 1;
+    const maxD = RULES.PLAYER_SPEED * RULES.BOOST_MULT * (dtS + 0.4) + 6;
+    const d = Math.hypot(x - p.x, y - p.y);
+    if (d > maxD && !p.trustNext) {
+      // dịch nhanh bất thường → co lại theo quãng đường cho phép
+      const k = maxD / d;
+      x = p.x + (x - p.x) * k;
+      y = p.y + (y - p.y) * k;
+    }
+    p.trustNext = false;
+    p.lastPosT = t;
+    p.x = x; p.y = y;
+    p.input.dx = Math.max(-1, Math.min(1, Number(dx) || 0));
+    p.input.dy = Math.max(-1, Math.min(1, Number(dy) || 0));
+    p.moving = !!(p.input.dx || p.input.dy);
+    if (p.input.dx !== 0) p.dir = p.input.dx > 0 ? 1 : -1;
+    p.animT += dtS;
   }
 
   // ================= TICK CHÍNH =================
+  // (v3) vị trí người chơi do client cập nhật qua setPlayerPos;
+  // tick chỉ lo: nhặt đồ (qua Spatial Hash), về đích, Lân, hồi sinh đồ.
   tick(dt) {
     const t = now();
     const events = [];
 
-    // --- Người chơi ---
+    // --- Người chơi: nhặt đồ bằng SPATIAL HASH O(1) ---
     for (const p of this.players.values()) {
-      if (p.finishedRank) { p.moving = false; continue; }
-      const stunned = t < p.stunnedUntil;
-      const boosting = t < p.boostUntil;
-      if (!stunned && (p.input.dx || p.input.dy)) {
-        let mag = Math.hypot(p.input.dx, p.input.dy) || 1;
-        const speed = RULES.PLAYER_SPEED * (boosting ? RULES.BOOST_MULT : 1);
-        const dx = (p.input.dx / mag) * speed * dt;
-        const dy = (p.input.dy / mag) * speed * dt;
-        moveWithCollision(p, dx, dy, 5);
-        if (p.input.dx !== 0) p.dir = p.input.dx > 0 ? 1 : -1;
-        p.moving = true;
-        p.animT += dt;
-      } else {
-        p.moving = false;
-      }
-
-      // nhặt đồ
-      for (const it of this.items) {
+      if (p.finishedRank) continue;
+      this.itemHash.query(p.x, p.y, RULES.PICKUP_RADIUS + 2, this._near);
+      for (const it of this._near) {
         if (!it.active) continue;
         if (dist2(p.x, p.y, it.x, it.y) <= RULES.PICKUP_RADIUS ** 2) {
           it.active = false;
           it.respawnAt = t + RULES.ITEM_RESPAWN_MS;
+          this.itemsDirty = true;
           if (it.type === 'lantern' || it.type === 'star') {
             p.progress += 1;
             p.score += SCORE[it.type];
@@ -309,11 +369,20 @@ class Arena {
       if (!it.active && it.respawnAt && t > it.respawnAt) {
         // sinh lại ở chỗ trống khác
         it.dead = true;
+        this.itemsDirty = true;
       }
     }
-    this.items = this.items.filter(it => !it.dead);
-    const activeCount = this.items.filter(it => it.active).length;
-    if (activeCount < RULES.MAX_ITEMS_ON_MAP && Math.random() < 0.35) this.spawnItem();
+    if (this.itemsDirty || this.items.some(it => it.dead)) {
+      this.items = this.items.filter(it => !it.dead);
+      const activeCount = this.items.filter(it => it.active).length;
+      if (activeCount < RULES.MAX_ITEMS_ON_MAP && Math.random() < 0.35) this.spawnItem();
+    }
+    // đồ vật vừa thay đổi → dựng lại lưới không gian + báo server gửi sự kiện items
+    if (this.itemsDirty) {
+      this.itemHash.rebuild(this.items);
+      this.itemsDirty = false;
+      this.itemsChanged = true;
+    }
 
     return events;
   }
@@ -345,6 +414,8 @@ class Arena {
   }
 
   // ================= SNAPSHOT =================
+  // (v3) chỉ gửi người chơi + Lân; đồ vật đi kênh riêng 'items'
+  // chỉ khi thay đổi → gói tin nhỏ hơn, gửi nhanh hơn, less GC
   snapshot() {
     const ps = [];
     for (const p of this.players.values()) {
@@ -358,15 +429,20 @@ class Arena {
       ps.push([p.id, Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10, p.dir, flags, p.progress, p.score, p.name, p.sid]);
     }
     const ls = this.lions.map(l => [l.id, Math.round(l.x * 10) / 10, Math.round(l.y * 10) / 10, l.dir, l.state]);
-    const its = [];
-    for (const it of this.items) {
-      if (it.active) its.push([it.id, ITEM_TYPES.indexOf(it.type), it.x, it.y]);
-    }
     return {
-      t: Date.now(), round: this.roundId, ps, ls, its,
+      t: Date.now(), round: this.roundId, ps, ls,
       fin: this.finishCount, champ: this.champion ? this.champion.sid : null,
       target: RULES.TARGET_LANTERNS,
     };
+  }
+
+  /** Danh sách đồ vật gọn nhẹ — gửi qua kênh 'items' khi có thay đổi */
+  itemsList() {
+    const out = [];
+    for (const it of this.items) {
+      if (it.active) out.push([it.id, ITEM_TYPES.indexOf(it.type), it.x, it.y]);
+    }
+    return out;
   }
 }
 

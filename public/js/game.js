@@ -1,7 +1,10 @@
 // ============================================================
-//  ĐÊM HỘI TRUNG THU — Client game
-//  Kết nối Socket.IO · vẽ pixel · dự đoán chuyển động của mình
-//  · joystick cảm ứng cho điện thoại · HUD + xếp hạng live
+//  ĐÊM HỘI TRUNG THU — Client game  (v3 — mượt hơn nhờ DSA)
+//  · MÔ PHỎNG LOCAL 60FPS cho chính mình (client-authoritative):
+//    di chuyển tức thì, không chờ mạng; gửi vị trí lên server 12 lần/s
+//  · Ring Buffer O(1) chứa snapshot + nội suy thích nghi theo độ trễ mạng
+//  · Đồ vật qua kênh riêng 'items' — chỉ nhận khi thay đổi (event-driven)
+//  · Joystick cảm ứng cho điện thoại · HUD + xếp hạng live
 // ============================================================
 'use strict';
 
@@ -15,14 +18,34 @@
   let SPR = null;          // sprites
   let mySid = null, myId = null;
   let token = sessionStorage.getItem('tt_token') || null;
-  const snaps = [];        // buffer snapshot để nội suy
   const fx = [];           // hiệu ứng nhỏ (sparkle, !, ...)
   let shakeT = 0;
   let running = false;
   let skyRunning = true;
 
-  // dự đoán vị trí của chính mình
-  const ghost = { x: 0, y: 0, dir: 1, have: false };
+  // ============ DSA 1: RING BUFFER (hàng đợi vòng tròn) ============
+  // push/đọc O(1) — không dùng array.shift() gây copy toàn mảng mỗi snapshot
+  // → giảm GC, giảm giật khung hình khi mạng gửi dồn dập
+  class RingBuffer {
+    constructor(n) { this.a = new Array(n); this.n = n; this.i = 0; this.c = 0; }
+    push(v) { this.a[this.i] = v; this.i = (this.i + 1) % this.n; if (this.c < this.n) this.c++; }
+    at(k) { return this.a[(this.i - this.c + k + this.n * 2) % this.n]; }
+    last() { return this.c ? this.at(this.c - 1) : null; }
+    prev() { return this.c > 1 ? this.at(this.c - 2) : this.last(); }
+    clear() { this.i = 0; this.c = 0; }
+  }
+  const snaps = new RingBuffer(12);
+  let snapInterval = 0;    // EMA khoảng cách giữa 2 snapshot → delay nội suy thích nghi
+
+  // Đồ vật: server chỉ gửi KHI THAY ĐỔI (event-driven) → ít dữ liệu hơn hẳn
+  let items = [];
+
+  // trạng thái của chính mình (mô phỏng local)
+  const ghost = { x: 0, y: 0, dir: 1, have: false, moving: false };
+  let selfStunUntil = 0;   // đang choáng vì bị Lân đụng (đồng bộ với server)
+  let selfBoostUntil = 0;  // đang tăng tốc vì ăn bánh trung thu
+  let lastFrameT = 0;
+  let lastMoveT = 0;
 
   // ============ NỀN TRỜI MÀN ĐĂNG NHẬP ============
   const bgCv = $('#bg-canvas');
@@ -36,7 +59,7 @@
     requestAnimationFrame(skyLoop);
   }
 
-  // ============ VA CHẠM (bản sao nhẹ của server cho dự đoán) ============
+  // ============ VA CHẠM (bản sao nhẹ của server cho mô phỏng local) ============
   function isSolid(px, py) {
     const col = Math.floor(px / CFG.TILE), row = Math.floor(py / CFG.TILE);
     if (col < 0 || row < 0 || col >= CFG.MAP_W || row >= CFG.MAP_H) return true;
@@ -127,10 +150,19 @@
       if (!running) { running = true; requestAnimationFrame(renderLoop); }
     });
     socket.on('snap', (s) => {
-      snaps.push({ rt: performance.now(), d: s });
-      while (snaps.length > 6) snaps.shift();
+      const rt = performance.now();
+      // DSA 2: đo khoảng snapshot bằng EMA (trung bình trượt mũ) → nội suy thích nghi
+      const prev = snaps.last();
+      if (prev) {
+        const gap = Math.min(400, Math.max(10, rt - prev.rt));
+        snapInterval = snapInterval ? snapInterval * 0.85 + gap * 0.15 : gap;
+      }
+      snaps.push({ rt, d: s });
+      reconcileSelf(s);
       updateHud(s);
     });
+    // đồ vật chỉ gửi khi thay đổi — không kèm mỗi snapshot nữa
+    socket.on('items', (d) => { items = d.its || []; });
     socket.on('ev', onEvent);
     socket.on('authError', () => { sessionStorage.removeItem('tt_token'); location.reload(); });
     socket.on('connect_error', () => { $('#overlay-error').hidden = false; });
@@ -139,6 +171,20 @@
       $('#overlay-error').hidden = true;
       socket.emit('auth', { token });
     });
+  }
+
+  // đối chiếu vị trí server: lệch lớn (reset/lỗi mạng) → snap; đứng yên mà trôi → kéo nhẹ
+  function reconcileSelf(s) {
+    if (!mySid) return;
+    const me = s.ps.find(p => p[8] === mySid);
+    if (!me) return;
+    if (!ghost.have) { ghost.x = me[1]; ghost.y = me[2]; ghost.dir = me[3] || 1; ghost.have = true; return; }
+    const dx = me[1] - ghost.x, dy = me[2] - ghost.y;
+    const d = Math.hypot(dx, dy);
+    if (d > 60) { ghost.x = me[1]; ghost.y = me[2]; }                       // lệch xa quá → đồng bộ cứng
+    else if (d > 2 && !ghost.moving && performance.now() - lastMoveT > 350) {
+      ghost.x += dx * 0.1; ghost.y += dy * 0.1;                             // chống trôi khi đứng yên
+    }
   }
 
   // ============ INPUT ============
@@ -194,21 +240,28 @@
   addEventListener('mousemove', joyMove);
   addEventListener('mouseup', joyEnd);
 
-  // gửi input 20 lần/giây khi có thay đổi
-  let lastSent = { dx: 0, dy: 0 };
-  setInterval(() => {
-    if (!socket || !running) return;
+  // đọc input từ bàn phím + joystick
+  function readInput() {
     let dx = 0, dy = 0;
     if (keys['a'] || keys['arrowleft']) dx -= 1;
     if (keys['d'] || keys['arrowright']) dx += 1;
     if (keys['w'] || keys['arrowup']) dy -= 1;
     if (keys['s'] || keys['arrowdown']) dy += 1;
     if (joy.active && (joy.dx || joy.dy)) { dx = joy.dx; dy = joy.dy; }
-    if (dx !== lastSent.dx || dy !== lastSent.dy) {
+    return { dx, dy };
+  }
+
+  let lastSent = { dx: 0, dy: 0 };
+  // (v3) gửi VỊ TRÍ của mình lên server 12 lần/s — thay vì gửi input rồi chờ server di chuyển
+  // → hành động của người chơi có phản hồi tức thì tại máy mình, mạng chỉ cần "xác nhận"
+  setInterval(() => {
+    if (!socket || !socket.connected || !running || !ghost.have) return;
+    const { dx, dy } = readInput();
+    if (dx !== lastSent.dx || dy !== lastSent.dy || dx || dy) {
       lastSent = { dx, dy };
-      socket.emit('input', { dx, dy });
+      socket.emit('pos', { x: Math.round(ghost.x * 10) / 10, y: Math.round(ghost.y * 10) / 10, dx, dy });
     }
-  }, 50);
+  }, 80);
 
   // ============ HUD ============
   function updateHud(s) {
@@ -223,17 +276,22 @@
     const rows = s.ps.map(p => ({
       name: p[7], prog: p[5], score: p[6], fin: !!(p[4] & 16), champ: !!(p[4] & 32), sid: p[8],
     })).sort((a, b) => (b.fin - a.fin) || (a.fin ? 0 : (b.prog - a.prog) || (b.score - a.score)));
-    const list = $('#stand-list');
-    list.innerHTML = '';
-    rows.slice(0, 7).forEach((r, i) => {
-      const li = document.createElement('li');
-      if (r.sid === mySid) li.className = 'me';
-      if (r.fin) li.classList.add('fin');
-      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
-      li.innerHTML = `<span>${medal}</span><span class="st-name"></span><span class="st-prog">${r.fin ? '🏁' : '🏮' + r.prog}</span>`;
-      li.querySelector('.st-name').textContent = r.name + (r.champ ? ' 👑' : '');
-      list.appendChild(li);
-    });
+    // chỉ dựng lại DOM khi dữ liệu thật sự đổi (đi lại liên tục không đổi xếp hạng → không jank)
+    const standKey = rows.map(r => `${r.name}|${r.prog}|${r.score}|${r.fin ? 1 : 0}|${r.champ ? 1 : 0}|${r.sid === mySid ? 1 : 0}`).join(';');
+    if (standKey !== updateHud._last) {
+      updateHud._last = standKey;
+      const list = $('#stand-list');
+      list.innerHTML = '';
+      rows.slice(0, 7).forEach((r, i) => {
+        const li = document.createElement('li');
+        if (r.sid === mySid) li.className = 'me';
+        if (r.fin) li.classList.add('fin');
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+        li.innerHTML = `<span>${medal}</span><span class="st-name"></span><span class="st-prog">${r.fin ? '🏁' : '🏮' + r.prog}</span>`;
+        li.querySelector('.st-name').textContent = r.name + (r.champ ? ' 👑' : '');
+        list.appendChild(li);
+      });
+    }
   }
 
   function toast(msg, cls = 'info', ms = 2600) {
@@ -266,7 +324,10 @@
       }
       case 'power':
         fx.push({ type: 'spark', x: ev.x, y: ev.y, t: performance.now(), color: '#d9a05b' });
-        if (mine) { AudioManager.play('power'); toast('🥮 Bánh trung thu — tăng tốc 5 giây!', 'good'); }
+        if (mine) {
+          AudioManager.play('power'); toast('🥮 Bánh trung thu — tăng tốc 5 giây!', 'good');
+          selfBoostUntil = performance.now() + (CFG?.RULES?.BOOST_MS || 5000); // mô phỏng local
+        }
         break;
       case 'drum':
         fx.push({ type: 'ring', x: ev.x, y: ev.y, t: performance.now() });
@@ -284,6 +345,10 @@
           shakeT = 0.28;
           if (navigator.vibrate) navigator.vibrate(90);
           toast(`😱 Lân đụng vào! Rớt ${ev.drop} đèn — nhặt lại nha!`, 'warn');
+          // đồng bộ với server: đứng choáng tại chỗ bị đụng (không di chuyển local)
+          selfStunUntil = performance.now() + (CFG?.RULES?.STUN_MS || 1000);
+          ghost.x = ev.x; ghost.y = ev.y;
+          socket?.emit('pos', { x: Math.round(ghost.x * 10) / 10, y: Math.round(ghost.y * 10) / 10, dx: 0, dy: 0 });
         }
         break;
       }
@@ -307,6 +372,11 @@
         banner('🔄 LƯỢT MỚI BẮT ĐẦU!', 1800);
         toast('Tiến độ đã đặt lại — ai nhanh nhất đây?', 'info');
         ghost.have = false;
+        ghost.moving = false;
+        selfStunUntil = 0; selfBoostUntil = 0;
+        items = [];
+        snaps.clear();
+        updateHud._last = null;
         break;
       case 'leave':
         break;
@@ -437,14 +507,14 @@
     // scale canvas theo màn hình
     fitCanvas();
 
-    if (!snaps.length) return;
-    // chọn 2 snapshot gần nhất để nội suy
+    const s1 = snaps.last();
+    if (!s1) return;
+    const s0 = snaps.prev();
+    // DSA 3: delay nội suy THÍCH NGHI — mạng nhanh → ~90ms, mạng jitter → tự nới tới 220ms
     const nowT = performance.now();
-    const delay = 105;
-    let s1 = snaps[snaps.length - 1];
-    let s0 = snaps.length > 1 ? snaps[snaps.length - 2] : s1;
-    const span = s1.rt - s0.rt || 66;
-    let k = Math.min(1.25, Math.max(0, (nowT - delay - s0.rt) / span));
+    const delay = Math.min(220, Math.max(90, (snapInterval || 66) * 1.5 + 20));
+    const span = (s1.rt - s0.rt) || (snapInterval || 66);
+    const k = Math.min(1.25, Math.max(0, (nowT - delay - s0.rt) / span));
 
     if (!bgPainted) paintBg();
     cx.drawImage(bg, 0, 0);
@@ -469,8 +539,8 @@
     const myProgress = meEnt ? meEnt[5] : 0;
     Sprites.drawGate(cx, CFG.GATE.x - 10, CFG.GATE.y - 26, myProgress >= CFG.RULES.TARGET_LANTERNS, t);
 
-    // đồ vật
-    for (const it of s1.d.its) {
+    // đồ vật (kênh riêng 'items' — event-driven)
+    for (const it of items) {
       const type = CFG.ITEM_TYPES[it[1]];
       const spr = SPR.items[type];
       if (!spr) continue;
@@ -521,6 +591,24 @@
       interCache.key = s0.rt + ':' + s1.rt;
     }
     const p0map = interCache.p0;
+    // --- (v3) MÔ PHỎNG LOCAL 60FPS cho chính mình: điều khiển tức thì, không chờ mạng ---
+    const inp = readInput();
+    const stunnedNow = performance.now() < selfStunUntil;
+    if (ghost.have && !stunnedNow && (inp.dx || inp.dy)) {
+      const G = CFG.RULES;
+      const boosting = performance.now() < selfBoostUntil;
+      const speed = G.PLAYER_SPEED * (boosting ? G.BOOST_MULT : 1);
+      const m = Math.hypot(inp.dx, inp.dy) || 1;
+      const fdt = Math.min(0.05, (t - lastFrameT) / 1000) || 0.016;
+      ghostMove((inp.dx / m) * speed * fdt, (inp.dy / m) * speed * fdt);
+      if (inp.dx !== 0) ghost.dir = inp.dx > 0 ? 1 : -1;
+      ghost.moving = true;
+      lastMoveT = performance.now();
+    } else {
+      ghost.moving = false;
+    }
+    lastFrameT = t;
+
     for (const p of s1.d.ps) {
       const [id, x1, y1, dir, fl, prog, score, name] = p;
       const boosting = fl & 8;
@@ -529,19 +617,9 @@
       let y = prev ? lerp(prev[2], y1, k) : y1;
 
       const isMe = p[8] === mySid;
-      if (isMe) {
-        // dự đoán của chính mình: ghost chạy mượt theo input, kéo dần về vị trí server
-        if (!ghost.have) { ghost.x = x; ghost.y = y; ghost.have = true; }
-        const G = CFG.RULES;
-        if ((fl & 1) && !(fl & 2)) {
-          const speed = G.PLAYER_SPEED * (boosting ? G.BOOST_MULT : 1) / 60;
-          const m = Math.hypot(lastSent.dx, lastSent.dy) || 1;
-          ghostMove((lastSent.dx / m) * speed, (lastSent.dy / m) * speed);
-        }
-        if (Math.hypot(ghost.x - x, ghost.y - y) > 30) { ghost.x = x; ghost.y = y; }
-        else { ghost.x = lerp(ghost.x, x, 0.08); ghost.y = lerp(ghost.y, y, 0.08); }
+      if (isMe && ghost.have) {
+        // vị trí của chính mình = mô phỏng local — KHÔNG còn bị kéo về vị trí server (hết rubber-band)
         x = ghost.x; y = ghost.y;
-        if (lastSent.dx !== 0) ghost.dir = lastSent.dx > 0 ? 1 : -1;
       }
 
       const stunned = fl & 2, invuln = fl & 4, fin = fl & 16, champ = fl & 32;
@@ -608,8 +686,17 @@
         cx.font = '700 9px "Pixelify Sans", monospace';
         cx.textAlign = 'center';
         cx.fillStyle = '#5ad6c8';
-        cx.fillText('chạy rồi! 💨', Math.round(x), py - 4);
+        cx.fillText('chạy rồi! 💨', Math.round(x), py + spr.height / 2 + 12);
       }
+      // 🔔 NHÃN "LÂN" ghi rõ trên đầu — người chơi không thể nhầm với nhân vật
+      cx.font = '700 8px "Pixelify Sans", monospace';
+      cx.textAlign = 'center';
+      cx.lineWidth = 2.5;
+      cx.strokeStyle = 'rgba(10,6,26,0.92)';
+      const label = state === 'dash' ? 'LÂN!!' : state === 'telegraph' ? 'LÂN !' : 'LÂN';
+      cx.strokeText(label, Math.round(x), py - 5);
+      cx.fillStyle = state === 'dash' ? '#ff5a4e' : state === 'telegraph' ? '#ffd23b' : '#ffb39f';
+      cx.fillText(label, Math.round(x), py - 5);
     }
 
     // đom đóm trang trí

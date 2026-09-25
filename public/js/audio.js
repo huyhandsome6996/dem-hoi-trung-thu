@@ -1,8 +1,9 @@
 // ============================================================
 //  ĐÊM HỘI TRUNG THU — Âm thanh
-//  Nhạc nền: ưu tiên file /audio/den-ong-sao.mp3 (nếu bạn bỏ vào)
-//  Không có file → chơi giai điệu 8-bit bài "Chiếc Đèn Ông Sao"
-//  (Phạm Tuyên) hòa thanh theo hợp âm gốc G–E7–Am–Em–D–G7–C
+//  Nhạc nền: ưu tiên file /audio/den-ong-sao.mp3 (bản thu BÀI HÁT
+//  CHIẾC ĐÈN ÔNG SAO — Nhạc Tết Trung Thu do BTC gửi)
+//  Không có file → chơi giai điệu 8-bit cùng bài (Phạm Tuyên)
+//  hòa thanh theo hợp âm gốc G–E7–Am–Em–D–G7–C
 //  SFX: tổng hợp bằng WebAudio (không cần file)
 // ============================================================
 'use strict';
@@ -81,9 +82,9 @@ const AudioManager = (() => {
     if (started) return;
     started = true;
     ensureCtx();
-    // thử MP3 trước
+    // thử MP3 bản thu gốc trước (v=2 để phá cache bản cũ nếu có)
     try {
-      const res = await fetch('/audio/den-ong-sao.mp3', { cache: 'force-cache' });
+      const res = await fetch('/audio/den-ong-sao.mp3?v=2', { cache: 'default' });
       if (res.ok) {
         const buf = await ctx.decodeAudioData(await res.arrayBuffer());
         const src = ctx.createBufferSource();

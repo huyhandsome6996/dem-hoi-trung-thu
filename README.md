@@ -14,7 +14,7 @@ Game pixel phong cách Trung thu Việt Nam, **chơi online nhiều người cù
 - ⭐ **Đèn ông sao** — +1 tiến độ, +35 điểm (cao hơn!)
 - 🥮 **Bánh trung thu** — chạy nhanh hơn trong 5 giây
 - 🥁 **Cái trống** — Lân sợ, bỏ chạy 4 giây
-- 🦁 **Con Lân** — đủ gần là **lao tới tấn công**! Bị đụng → choáng + **rớt 2 đèn** ra đất
+- 🦁 **Con Lân** — đủ gần là **lao tới tấn công**! (đã nhẹ hơn: báo hiệu lâu hơn, lao ngắn hơn, nghỉ lâu hơn — né được) Bị đụng → choáng + **rớt 1 đèn** ra đất. Nhìn chữ **LÂN** trên đầu để nhận biết nha!
 - 🏯 **Cổng ĐÍCH** — đủ 10 đèn thì cổng sáng lên, chạy vào để về đích
 
 Có **bánh trung thu và cái trống** thì đừng bỏ phí — cứu mạng đấy!
@@ -23,7 +23,9 @@ Có **bánh trung thu và cái trống** thì đừng bỏ phí — cứu mạng
 
 Vào `/admin`, đăng nhập:
 - **Tài khoản:** `Admin`
-- **Mật khẩu:** `@Huyhandsome`
+- **Mật khẩu:** `@Huyhandsome2006` (hoặc `@Huyhandsome`)
+
+> 💡 Ở **màn hình đăng nhập game**, BTC cũng có thể điền tên `Admin` + mật khẩu vào ô "Mã sinh viên" → tự động vào thẳng trang quản trị.
 
 Tính năng: bảng người chơi **tự cập nhật 2 giây/lần**, cột 🎁 **đánh dấu đã trao quà**, **⬇️ Tải CSV** về máy, **🔄 Bắt đầu lượt mới** (reset tiến độ), cảnh báo **⚠ trùng MSSV** (2 người khác tên dùng chung 1 MSSV), thống kê tổng.
 
@@ -53,13 +55,16 @@ node server.js
 
 ## 🎵 Nhạc nền
 
-Game chơi giai điệu 8-bit bài **"Chiếc Đèn Ông Sao"** (Phạm Tuyên) tổng hợp bằng Web Audio API — hòa thanh theo hợp âm gốc (G–E7–Am–Em–D–G7–C), có cả đoạn điệp khúc "Tùng rinh rinh", hợp phong cách pixel. Muốn dùng bản thu gốc: đặt file `public/audio/den-ong-sao.mp3` vào repo là game tự ưu tiên phát file đó.
+Game phát **bản thu bài "Chiếc Đèn Ông Sao" (Nhạc Tết Trung Thu)** từ file `public/audio/den-ong-sao.mp3` (BTC gửi, đã đặt sẵn trong repo) — tự lặp liên tục. Nếu file bị thiếu, game tự fallback sang giai điệu 8-bit cùng bài (Phạm Tuyên) hòa thanh theo hợp âm gốc (G–E7–Am–Em–D–G7–C) để không bao giờ im lặng.
 
-## 🛠️ Kỹ thuật
+## 🛠️ Kỹ thuật (v3 — tối ưu độ mượt bằng DSA)
 
 - HTML + CSS + JavaScript thuần (Canvas API, Web Audio API) — đúng phong cách pixel, không framework
-- Node.js + Express + Socket.IO — server là trọng tài (authoritative), chống lag chống ăn gian
-- SQLite qua `node:sqlite` (không cần compile native module — deploy Render không bao giờ lỗi build)
-- Đồ họa pixel 100% vẽ tay bằng code, không dùng ảnh ngoài
+- Node.js + Express + Socket.IO + SQLite qua `node:sqlite` (không cần compile native)
+- **Client-authoritative movement**: người chơi di chuyển ngay tại máy mình 60FPS (độ trễ phím ≈ 0), chỉ gửi vị trí lên server 12 lần/s; server vẫn kẹp biên + chống dịch chuyển bất hợp lệ
+- **DSA — Spatial Hash Grid** (server): tra cứu đồ vật quanh người chơi O(1) thay vì quét toàn bản đồ — tải 16 người chơi × 12Hz server vẫn xử lý ~1ms/request
+- **DSA — Ring Buffer O(1)** (client): chứa snapshot, không dùng array.shift() gây GC
+- **DSA — Nội suy thích nghi (EMA)** (client): delay nội suy tự co giãn 90–220ms theo độ trễ mạng thật → Lân và bạn bè di chuyển mượt dù mạng gợn sóng
+- **Event-driven items**: đồ vật chỉ gửi qua mạng khi nhặt/hồi sinh (không kèm mỗi snapshot) → gói tin nhẹ hơn ~40%
 
 Made with 🏮 cho đêm Trung thu.

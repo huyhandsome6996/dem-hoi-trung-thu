@@ -44,21 +44,22 @@ const RULES = {
   BOOST_MULT: 1.55,
   BOOST_MS: 5000,
   PICKUP_RADIUS: 10,
-  HIT_RADIUS: 11,
-  STUN_MS: 1250,
+  HIT_RADIUS: 10,
+  STUN_MS: 1000,
   INVULN_MS: 2600,
   SPAWN_INVULN_MS: 3000,
-  DROP_ON_HIT: 2,            // bị Lân đụng rớt mấy đèn
+  DROP_ON_HIT: 1,            // bị Lân đụng rớt mấy đèn (giảm từ 2 xuống 1 — bớt nặng nề)
   FINISH_BONUS: [200, 100, 50], // điểm thưởng hạng 1/2/3
   LION_COUNT: 2,
-  LION_PATROL_SPEED: 40,
-  LION_DASH_SPEED: 238,
-  LION_FLEE_SPEED: 92,
-  LION_DETECT: 120,          // phát hiện player
-  LION_TELEGRAPH_MS: 550,    // giây "quấy" trước khi lao
-  LION_DASH_MS: 850,
-  LION_RECOVER_MS: 900,
-  LION_COOLDOWN_MS: 2100,
+  // --- Lân đã NERF (giảm ~35-45% độ mạnh nhưng vẫn phải né) ---
+  LION_PATROL_SPEED: 34,     // 40 → 34 đi tuần chậm hơn
+  LION_DASH_SPEED: 150,      // 238 → 150 (người chơi thường 86, boost 133 — giờ có thể né/thoát)
+  LION_FLEE_SPEED: 78,       // 92 → 78
+  LION_DETECT: 96,           // 120 → 96 phát hiện hẹp hơn
+  LION_TELEGRAPH_MS: 750,    // 550 → 750 báo hiệu lâu hơn → dễ né hơn
+  LION_DASH_MS: 620,         // 850 → 620 lao ngắn lại
+  LION_RECOVER_MS: 1100,     // 900 → 1100 nghỉ lâu hơn sau khi lao
+  LION_COOLDOWN_MS: 3000,    // 2100 → 3000 giữa 2 lần lao
   DRUM_FLEE_MS: 4200,
 };
 
