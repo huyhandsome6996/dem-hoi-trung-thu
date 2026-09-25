@@ -41,7 +41,7 @@
   let items = [];
 
   // trạng thái của chính mình (mô phỏng local)
-  const ghost = { x: 0, y: 0, dir: 1, have: false, moving: false };
+  const ghost = { x: 0, y: 0, dir: 1, have: false, moving: false, finished: false };
   let selfStunUntil = 0;   // đang choáng vì bị Lân đụng (đồng bộ với server)
   let selfBoostUntil = 0;  // đang tăng tốc vì ăn bánh trung thu
   let lastFrameT = 0;
@@ -179,6 +179,7 @@
     const me = s.ps.find(p => p[8] === mySid);
     if (!me) return;
     if (!ghost.have) { ghost.x = me[1]; ghost.y = me[2]; ghost.dir = me[3] || 1; ghost.have = true; return; }
+    ghost.finished = !!(me[4] & 16); // đã về đích → ngừng mô phỏng di chuyển
     const dx = me[1] - ghost.x, dy = me[2] - ghost.y;
     const d = Math.hypot(dx, dy);
     if (d > 60) { ghost.x = me[1]; ghost.y = me[2]; }                       // lệch xa quá → đồng bộ cứng
@@ -373,6 +374,7 @@
         toast('Tiến độ đã đặt lại — ai nhanh nhất đây?', 'info');
         ghost.have = false;
         ghost.moving = false;
+        ghost.finished = false;
         selfStunUntil = 0; selfBoostUntil = 0;
         items = [];
         snaps.clear();
@@ -594,7 +596,7 @@
     // --- (v3) MÔ PHỎNG LOCAL 60FPS cho chính mình: điều khiển tức thì, không chờ mạng ---
     const inp = readInput();
     const stunnedNow = performance.now() < selfStunUntil;
-    if (ghost.have && !stunnedNow && (inp.dx || inp.dy)) {
+    if (ghost.have && !ghost.finished && !stunnedNow && (inp.dx || inp.dy)) {
       const G = CFG.RULES;
       const boosting = performance.now() < selfBoostUntil;
       const speed = G.PLAYER_SPEED * (boosting ? G.BOOST_MULT : 1);
