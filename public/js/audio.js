@@ -1,7 +1,8 @@
 // ============================================================
 //  ĐÊM HỘI TRUNG THU — Âm thanh
-//  Nhạc nền: ưu tiên file /audio/den-ong-sao.mp3 (nếu có)
-//  Không có file → tự chơi chiptune 8-bit lấy cảm hứng "Chiếc Đèn Ông Sao"
+//  Nhạc nền: ưu tiên file /audio/den-ong-sao.mp3 (nếu bạn bỏ vào)
+//  Không có file → chơi giai điệu 8-bit bài "Chiếc Đèn Ông Sao"
+//  (Phạm Tuyên) hòa thanh theo hợp âm gốc G–E7–Am–Em–D–G7–C
 //  SFX: tổng hợp bằng WebAudio (không cần file)
 // ============================================================
 'use strict';
@@ -21,29 +22,42 @@ const AudioManager = (() => {
     }
   }
 
-  // Giai điệu 8-bit vui tươi, phóng khoáng theo phong cách đèn ông sao (nhịp 6/8)
-  // Bước = 0.16s. null = nghỉ.
-  const LEAD = [
-    'E5', 'G5', 'C6', 'G5', 'E5', 'G5', null, 'E5',
-    'D5', 'E5', 'G5', 'E5', 'C5', null, 'C5', null,
-    'E5', 'G5', 'A5', 'G5', 'E5', 'G5', 'A5', null,
-    'G5', 'E5', 'D5', 'E5', 'C5', null, null, null,
-    'C6', 'C6', 'A5', 'G5', 'A5', 'C6', null, 'A5',
-    'G5', 'E5', 'G5', 'A5', 'G5', 'E5', 'D5', null,
-    'E5', 'D5', 'C5', 'D5', 'E5', 'G5', 'E5', 'D5',
-    'C5', 'E5', 'G5', 'C6', 'G5', 'E5', 'C5', null,
+  // Giai điệu 8-bit theo bài "Chiếc Đèn Ông Sao" (Phạm Tuyên) — nhịp hành khúc 2/4
+  // Cấu trúc: 8 ô nhịp câu hát + 8 ô nhịp điệp khúc "Tùng rinh rinh"
+  // Mỗi ô nhịp 8 bước (0.14s/bước). '.' = nghỉ.
+  const MEL_BARS = [
+    // --- Câu hát ---
+    'D4 D4 G4 G4 B4 B4 . .',   // Chiếc đèn ông sao (G)
+    'D5 B4 A4 B4 G4 . . .',    // sao năm cánh tươi màu (G)
+    'B4 B4 C5 C#5 B4 . . .',   // Cán đây rất dài (E7)
+    'E5 E5 D5 C5 B4 A4 . .',   // cán cao quá đầu (Am) — chạm nốt cao nhất
+    'G4 G4 E4 E4 G4 . . .',    // Em cầm đèn sao (Em)
+    'A4 A4 A4 A4 . A4 A4 .',   // em hát vang vang (Am) — lặp ngân
+    'F#4 F#4 A4 A4 D5 . . .',  // Đèn sao tươi màu (D)
+    'D5 B4 A4 G4 . G4 . .',    // của đêm rằm liên hoan (G)
+    // --- Điệp khúc "Tùng rinh rinh" ---
+    'D5 D5 D5 D5 B4 B4 . .',   // Tùng rinh rinh, tùng tùng (G)
+    'D5 D5 D5 B4 B4 . . .',    // tùng tùng tùng rinh rinh (G)
+    'C5 C5 B4 A4 . B4 C5 .',   // Đây ánh sao vui (Am)
+    'A4 A4 D5 D5 . C#5 D5 .',  // chiếu xa non ngàn (D)
+    'D5 D5 B4 B4 . G4 G4 .',   // Tùng rinh rinh, rinh rinh (G7)
+    'G4 G4 C5 C5 E5 . . .',    // tùng rinh rinh (C)
+    'D5 C5 B4 A4 B4 C5 . .',   // Ánh sao Bác Hồ (D)
+    'B4 A4 G4 . G4 . . .',     // tỏa sáng nơi nơi (G)
   ];
-  const BASS = [
-    'C3', null, 'C3', null, 'A2', null, 'A2', null,
-    'F2', null, 'F2', null, 'G2', null, 'G2', null,
-    'C3', null, 'C3', null, 'A2', null, 'A2', null,
-    'F2', null, 'G2', null, 'C3', null, null, null,
-    'A2', null, 'A2', null, 'F2', null, 'F2', null,
-    'C3', null, 'C3', null, 'G2', null, 'G2', null,
-    'A2', null, 'A2', null, 'F2', null, 'F2', null,
-    'C3', null, 'G2', null, 'C3', null, null, null,
+  const BASS_BARS = [
+    'G2 . D3 . G2 . D3 .', 'G2 . D3 . G2 . D3 .',
+    'E2 . B2 . E2 . B2 .', 'A2 . E3 . A2 . E3 .',
+    'E2 . B2 . E2 . B2 .', 'A2 . E3 . A2 . E3 .',
+    'D2 . A2 . D2 . A2 .', 'G2 . D3 . G2 . D3 .',
+    'G2 . D3 . G2 . D3 .', 'G2 . D3 . G2 . D3 .',
+    'A2 . E3 . A2 . E3 .', 'D2 . A2 . D2 . A2 .',
+    'G2 . D3 . G2 . D3 .', 'C2 . G2 . C2 . G2 .',
+    'D2 . A2 . D2 . A2 .', 'G2 . D3 . G2 . D3 .',
   ];
-  const STEP = 0.16;
+  const LEAD = MEL_BARS.join(' ').trim().split(/\s+/).map(s => s === '.' ? null : s);
+  const BASS = BASS_BARS.join(' ').trim().split(/\s+/).map(s => s === '.' ? null : s);
+  const STEP = 0.14;
 
   // ---------- khởi tạo ----------
   function ensureCtx() {

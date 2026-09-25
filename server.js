@@ -16,7 +16,13 @@ const { Arena } = require('./arena');
 
 const PORT = process.env.PORT || 3000;
 const ADMIN_USER = process.env.ADMIN_USER || 'Admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '@Huyhandsome';
+// chấp nhận nhiều mật khẩu Admin (mặc định + biến môi trường)
+const ADMIN_PASSWORDS = new Set([
+  '@Huyhandsome', '@Huyhandsome2006',
+  ...(process.env.ADMIN_PASSWORDS || '').split(',').map(s => s.trim()).filter(Boolean),
+  ...(process.env.ADMIN_PASSWORD ? [process.env.ADMIN_PASSWORD] : []),
+]);
+const VERSION = 2;
 const SECRET = process.env.SESSION_SECRET || 'trung-thu-2026-den-ong-sao-secret';
 
 const app = express();
@@ -62,11 +68,11 @@ const sessions = new Map(); // socket.id -> {pid, rid, name, studentId}
 
 // ---------- REST: game ----------
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, round: arena.roundId, online: arena.players.size, champion: arena.champion ? arena.champion.name : null });
+  res.json({ ok: true, ver: VERSION, round: arena.roundId, online: arena.players.size, champion: arena.champion ? arena.champion.name : null });
 });
 
 app.get('/api/config', (req, res) => {
-  res.json(C.clientConfig());
+  res.json({ ...C.clientConfig(), ver: VERSION });
 });
 
 app.post('/api/login', (req, res) => {
@@ -100,7 +106,10 @@ app.post('/api/admin/login', (req, res) => {
   const u = String(req.body?.username ?? '');
   const p = String(req.body?.password ?? '');
   const okU = u.toLowerCase() === ADMIN_USER.toLowerCase();
-  const okP = p.length === ADMIN_PASSWORD.length && crypto.timingSafeEqual(Buffer.from(p), Buffer.from(ADMIN_PASSWORD));
+  let okP = false;
+  for (const cand of ADMIN_PASSWORDS) {
+    if (p.length === cand.length && crypto.timingSafeEqual(Buffer.from(p), Buffer.from(cand))) { okP = true; break; }
+  }
   if (!okU || !okP) {
     setTimeout(() => res.status(401).json({ error: 'Sai tài khoản hoặc mật khẩu Admin!' }), 600);
     return;

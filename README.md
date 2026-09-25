@@ -53,7 +53,7 @@ node server.js
 
 ## 🎵 Nhạc nền
 
-Game phát file `public/audio/den-ong-sao.mp3` (nhạc nền đã kèm sẵn trong repo, lặp vô hạn). Nếu xoá file này, game tự động chuyển sang **nhạc chiptune 8-bit** vui tươi (phong cách đèn ông sao) — vừa hợp pixel, vừa không cần bản quyền nhạc.
+Game chơi giai điệu 8-bit bài **"Chiếc Đèn Ông Sao"** (Phạm Tuyên) tổng hợp bằng Web Audio API — hòa thanh theo hợp âm gốc (G–E7–Am–Em–D–G7–C), có cả đoạn điệp khúc "Tùng rinh rinh", hợp phong cách pixel. Muốn dùng bản thu gốc: đặt file `public/audio/den-ong-sao.mp3` vào repo là game tự ưu tiên phát file đó.
 
 ## 🛠️ Kỹ thuật
 

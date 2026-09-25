@@ -70,6 +70,30 @@
       loginErr.hidden = false;
       return;
     }
+    // 🔐 BAN TỔ CHỨC: tên "Admin" + mật khẩu ở ô "Mã sinh viên" → thẳng trang Admin
+    if (name.toLowerCase() === 'admin') {
+      const btnA = $('#btn-login');
+      btnA.disabled = true;
+      btnA.textContent = '🔐 Đang vào trang Admin...';
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: name, password: studentId }),
+        });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || 'Sai mật khẩu Admin!');
+        sessionStorage.setItem('tt_admin', d.token);
+        location.href = '/admin';
+        return;
+      } catch (err) {
+        loginErr.textContent = err.message + ' (Người chơi bình thường thì điền tên thật + MSSV nha!)';
+        loginErr.hidden = false;
+        btnA.disabled = false;
+        btnA.textContent = '🏮 VÀO HỘI NGAY';
+        return;
+      }
+    }
     const btn = $('#btn-login');
     btn.disabled = true;
     btn.textContent = '🏮 Đang vào...';
@@ -95,7 +119,7 @@
   // ============ SOCKET ============
   let socket = null;
   function connect() {
-    socket = io({ auth: { token } });
+    socket = io({ auth: { token }, transports: ['websocket', 'polling'], reconnectionDelayMax: 5000 });
     socket.on('welcome', (w) => {
       mySid = w.youSid; myId = w.youId;
       $('#overlay-loading').hidden = true;
@@ -354,6 +378,7 @@
   const bg = document.createElement('canvas');
   bg.width = 480; bg.height = 272;
   let bgPainted = false;
+  const interCache = { key: null, p0: null, l0: null };
 
   function paintBg() {
     const g = bg.getContext('2d');
@@ -489,10 +514,16 @@
       }
     }
 
-    // người chơi (nội suy)
-    const p0map = new Map(s0.d.ps.map(p => [p[0], p]));
+    // người chơi (nội suy) — cache map nội suy theo cặp snapshot để giảm GC
+    if (interCache.key !== s0.rt + ':' + s1.rt) {
+      interCache.p0 = new Map(s0.d.ps.map(p => [p[0], p]));
+      interCache.l0 = new Map(s0.d.ls.map(l => [l[0], l]));
+      interCache.key = s0.rt + ':' + s1.rt;
+    }
+    const p0map = interCache.p0;
     for (const p of s1.d.ps) {
       const [id, x1, y1, dir, fl, prog, score, name] = p;
+      const boosting = fl & 8;
       const prev = p0map.get(id);
       let x = prev ? lerp(prev[1], x1, k) : x1;
       let y = prev ? lerp(prev[2], y1, k) : y1;
@@ -514,7 +545,6 @@
       }
 
       const stunned = fl & 2, invuln = fl & 4, fin = fl & 16, champ = fl & 32;
-      const boosting = fl & 8;
       if (invuln && Math.floor(t / 90) % 2) continue; // nhấp nháy bất tử
 
       const moving = fl & 1;
@@ -555,7 +585,7 @@
     }
 
     // lân (nội suy)
-    const l0map = new Map(s0.d.ls.map(l => [l[0], l]));
+    const l0map = interCache.l0;
     for (const l of s1.d.ls) {
       const [id, x1, y1, dir, state] = l;
       const prev = l0map.get(id);

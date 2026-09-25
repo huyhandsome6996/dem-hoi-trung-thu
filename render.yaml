@@ -11,7 +11,7 @@ services:
         value: 24.21.0
       - key: ADMIN_USER
         value: Admin
-      - key: ADMIN_PASSWORD
-        value: "@Huyhandsome"
+      - key: ADMIN_PASSWORDS
+        value: "@Huyhandsome,@Huyhandsome2006"
       - key: SESSION_SECRET
         generateValue: true
