@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0e0b26">
+  <title>🏮 Đêm Hội Trung Thu — Pixel Race</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏮</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400..700&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css?v=2">
+</head>
+<body>
+  <!-- Bầu trời trang trí (màn đăng nhập) -->
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
+
+  <!-- ================= MÀN ĐĂNG NHẬP ================= -->
+  <section id="screen-login" class="screen">
+    <div class="login-wrap">
+      <div class="game-title">
+        <div class="title-sub">✦ ✦ ✦</div>
+        <h1>ĐÊM HỘI TRUNG THU</h1>
+        <div class="title-tag">PIXEL RACE · Thu thập lồng đèn · Né Lân!</div>
+        <div class="title-sub">✦ ✦ ✦</div>
+      </div>
+
+      <form id="login-form" class="card" autocomplete="off">
+        <label class="field">
+          <span>👤 Họ và tên</span>
+          <input id="in-name" name="name" maxlength="24" placeholder="Ví dụ: Nguyễn Văn A" required>
+        </label>
+        <label class="field">
+          <span>🎓 Mã sinh viên</span>
+          <input id="in-sid" name="studentId" maxlength="20" placeholder="Ví dụ: SV2026001" required>
+        </label>
+        <button type="submit" id="btn-login" class="btn btn-primary">🏮 VÀO HỘI NGAY</button>
+        <div id="login-err" class="login-err" hidden></div>
+        <div class="login-note">🎵 Mở loa lên nha — nhạc nền đã được bật sẵn!</div>
+      </form>
+
+      <div class="howto card">
+        <div class="howto-title">📜 CÁCH CHƠI</div>
+        <div class="howto-grid">
+          <div class="howto-item"><canvas class="mini" data-sprite="lantern" width="20" height="24"></canvas><span>Thu <b>10 lồng đèn</b> trên bản đồ</span></div>
+          <div class="howto-item"><canvas class="mini" data-sprite="star" width="26" height="26"></canvas><span>Đèn <b>ông sao</b> + nhiều điểm hơn</span></div>
+          <div class="howto-item"><canvas class="mini" data-sprite="mooncake" width="20" height="20"></canvas><span><b>Bánh trung thu</b> = chạy nhanh hơn</span></div>
+          <div class="howto-item"><canvas class="mini" data-sprite="drum" width="22" height="20"></canvas><span><b>Cái trống</b> = Lân sợ chạy mất</span></div>
+          <div class="howto-item"><canvas class="mini" data-sprite="lion" width="44" height="34"></canvas><span><b>NÉ con Lân!</b> Bị đụng là rớt đèn 😱</span></div>
+          <div class="howto-item"><canvas class="mini" data-sprite="gate" width="30" height="30"></canvas><span>Đủ đèn → chạy vào <b>CỔNG ĐÍCH</b></span></div>
+        </div>
+        <div class="howto-ctrl">🖥️ Máy tính: <b>WASD / phím mũi tên</b> &nbsp;·&nbsp; 📱 Điện thoại: <b>joystick cảm ứng</b> (chạm màn hình)</div>
+        <div class="howto-race">🏁 Ai đủ 10 đèn và về đích <b>ĐẦU TIÊN</b> sẽ được vào khu vực Ban Tổ chức nhận quà!</div>
+      </div>
+
+      <div class="login-footer">
+        <span>Made with 🏮 cho đêm Trung thu</span>
+        <a href="/admin" class="admin-link">🔐 Admin</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= MÀN CHƠI ================= -->
+  <section id="screen-game" class="screen" hidden>
+    <div id="game-wrap">
+      <canvas id="game" width="480" height="272"></canvas>
+
+      <!-- HUD -->
+      <div id="hud" class="hidden">
+        <div id="hud-me" class="hud-card">
+          <div id="hud-name">👤 ...</div>
+          <div id="hud-progress">🏮 0/10</div>
+          <div id="hud-score">⭐ 0 điểm</div>
+          <div id="hud-bar-wrap"><div id="hud-bar"></div></div>
+        </div>
+        <div id="hud-standing" class="hud-card">
+          <div class="stand-title">🏆 BẢNG XẾP HẠNG</div>
+          <ol id="stand-list"></ol>
+        </div>
+        <div id="hud-btns">
+          <button id="btn-mute" class="btn-icon" title="Bật/tắt nhạc">🔊</button>
+          <button id="btn-fs" class="btn-icon" title="Toàn màn hình">⛶</button>
+        </div>
+        <div id="toasts"></div>
+        <div id="banner" hidden></div>
+      </div>
+
+      <!-- Joystick cảm ứng -->
+      <div id="joystick" class="hidden">
+        <div id="joy-base"><div id="joy-knob"></div></div>
+      </div>
+
+      <!-- Gợi ý xoay ngang -->
+      <div id="rotate-hint" hidden>
+        <div class="card">📱 Xoay ngang màn hình để chơi đã hơn nha!<br><button id="btn-rotate-ok" class="btn btn-small">Đã biết, chơi tiếp ✋</button></div>
+      </div>
+
+      <!-- Overlay: chờ vào game -->
+      <div id="overlay-loading" class="overlay">
+        <div class="card loading-card">
+          <div class="loading-lantern">🏮</div>
+          <div>Đang vào đêm hội...</div>
+        </div>
+      </div>
+
+      <!-- Overlay: đã về đích (thường) -->
+      <div id="overlay-finish" class="overlay" hidden>
+        <div class="card finish-card">
+          <div class="finish-emoji">🎉</div>
+          <h2 id="finish-title">Bạn về đích!</h2>
+          <div id="finish-stats" class="finish-stats"></div>
+          <div id="finish-stand"></div>
+          <button id="btn-spectate" class="btn">👀 Xem tiếp cuộc đua</button>
+        </div>
+      </div>
+
+      <!-- Overlay: NGƯỜI CHIẾN THẮNG -->
+      <div id="overlay-champion" class="overlay" hidden>
+        <canvas id="confetti" aria-hidden="true"></canvas>
+        <div class="card champion-card">
+          <div class="champion-trophy">🏆</div>
+          <h2 class="champion-title">NGƯỜI CHIẾN THẮNG ĐẦU TIÊN!</h2>
+          <div id="champ-name" class="champ-name"></div>
+          <div class="champ-note">🎁 Bạn là người đầu tiên về đích — chỉ bạn được vào khu vực Ban Tổ chức trước để nhận quà!</div>
+          <a id="btn-admin-go" class="btn btn-primary" href="/admin">🏛️ VÀO GIAO DIỆN ADMIN NGAY</a>
+          <div class="champ-count">Tự động chuyển sau <span id="champ-count">8</span>s...</div>
+        </div>
+      </div>
+
+      <!-- Overlay: lỗi kết nối -->
+      <div id="overlay-error" class="overlay" hidden>
+        <div class="card">
+          <h2>⚠️ Mất kết nối</h2>
+          <div id="error-msg">Không gọi được máy chủ. Thử tải lại trang nha!</div>
+          <button id="btn-reload" class="btn btn-primary">🔄 Tải lại trang</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/sprites.js?v=2"></script>
+  <script src="/js/audio.js?v=2"></script>
+  <script src="/js/game.js?v=4"></script>
+</body>
+</html>

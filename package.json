@@ -1,0 +1,16 @@
+{
+  "name": "dem-hoi-trung-thu",
+  "version": "1.0.0",
+  "description": "Game pixel Trung thu - Thu thập lồng đèn, né Lân - chơi online nhiều người, có database",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}

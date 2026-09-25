@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0e0b26">
+  <title>🔐 Admin — Đêm Hội Trung Thu</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏮</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400..700&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css?v=2">
+  <style>
+    body { overflow-y: auto; }
+    .admin-wrap { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 24px 12px 60px; gap: 16px; }
+    .admin-title { font-family: var(--font-pixel); color: var(--gold); font-size: clamp(20px, 4.5vw, 30px); text-shadow: 0 3px 0 #7a3b12; }
+    .admin-sub { color: var(--ink-dim); font-size: 17px; margin-top: -8px; }
+    #login-card { width: min(380px, 94vw); display: flex; flex-direction: column; gap: 12px; }
+    .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; width: min(960px, 96vw); }
+    .stat { background: var(--panel); border: 2px solid var(--border); padding: 10px 12px; text-align: center; }
+    .stat .num { font-family: var(--font-pixel); font-size: 26px; color: var(--gold); }
+    .stat .lbl { font-size: 15px; color: var(--ink-dim); }
+    .champ-banner {
+      width: min(960px, 96vw); text-align: center;
+      background: linear-gradient(180deg, #4a2f08, #2b1d08);
+      border: 3px solid var(--gold); padding: 10px;
+      font-family: var(--font-pixel); font-size: 19px; color: var(--gold);
+      animation: blink 1s steps(2) infinite;
+    }
+    .champ-banner.none { animation: none; background: var(--panel); color: var(--ink-dim); border-color: var(--border); }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; width: min(960px, 96vw); }
+    .btn-danger { background: linear-gradient(180deg, #ff6a5e, #e84545); color: #fff; }
+    .tbl-wrap { width: min(960px, 96vw); overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 2px solid var(--border); font-size: 17px; }
+    th, td { padding: 7px 9px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    th { font-family: var(--font-pixel); font-size: 14px; color: var(--gold); background: var(--panel-2); position: sticky; top: 0; }
+    tr.champ-row { background: #4a2f08; }
+    tr.champ-row td { color: #ffe9a3; }
+    .tag { font-family: var(--font-pixel); font-size: 12px; padding: 2px 6px; border: 1px solid; border-radius: 2px; }
+    .tag-fin { color: var(--green); border-color: var(--green); }
+    .tag-play { color: var(--teal); border-color: var(--teal); }
+    .tag-dup { color: #ffb3b3; border-color: var(--red); }
+    .gift-btn { font-family: var(--font-pixel); font-size: 13px; padding: 3px 8px; cursor: pointer; border: 2px solid var(--border); background: var(--bg-mid); color: var(--ink-dim); border-radius: 2px; }
+    .gift-btn.on { background: #4a2f08; border-color: var(--gold); color: var(--gold); }
+    .mssv-dup { color: #ffb3b3; }
+    #logout { position: fixed; top: 10px; right: 12px; z-index: 5; }
+    .back-link { color: var(--teal); font-size: 16px; text-decoration: none; }
+    .auto-note { color: var(--ink-dim); font-size: 14px; }
+  </style>
+</head>
+<body>
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
+  <div class="admin-wrap">
+    <h1 class="admin-title">🏮 BẢNG ĐIỀU KHIỂN BAN TỔ CHỨC</h1>
+    <div class="admin-sub">Đêm Hội Trung Thu — theo dõi trực tiếp, trao quà, mở lượt mới</div>
+    <a class="back-link" href="/">← Về màn chơi</a>
+
+    <!-- Đăng nhập -->
+    <div id="login-card" class="card">
+      <label class="field"><span>👤 Tài khoản Admin</span>
+        <input id="ad-user" placeholder="Admin" autocomplete="username">
+      </label>
+      <label class="field"><span>🔑 Mật khẩu</span>
+        <input id="ad-pass" type="password" placeholder="••••••••" autocomplete="current-password">
+      </label>
+      <button id="ad-login" class="btn btn-primary">🔓 ĐĂNG NHẬP</button>
+      <div id="ad-err" class="login-err" hidden></div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" hidden style="display:flex;flex-direction:column;align-items:center;gap:16px;width:100%;">
+      <div id="champ-banner" class="champ-banner none"></div>
+
+      <div class="stat-row">
+        <div class="stat"><div class="num" id="st-online">0</div><div class="lbl">Đang online</div></div>
+        <div class="stat"><div class="num" id="st-players">0</div><div class="lbl">Người chơi lượt này</div></div>
+        <div class="stat"><div class="num" id="st-fin">0</div><div class="lbl">Đã về đích</div></div>
+        <div class="stat"><div class="num" id="st-gifts">0</div><div class="lbl">Quà đã giao</div></div>
+        <div class="stat"><div class="num" id="st-total">0</div><div class="lbl">Tổng người chơi (mọi lượt)</div></div>
+      </div>
+
+      <div class="controls">
+        <button id="btn-round" class="btn">🔄 BẮT ĐẦU LƯỢT MỚI</button>
+        <a id="btn-csv" class="btn" href="#">⬇️ TẢI CSV</a>
+        <button id="btn-clear" class="btn btn-danger">🗑️ XOÁ TOÀN BỘ DỮ LIỆU</button>
+      </div>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Tên</th><th>MSSV</th><th>Đèn</th><th>Điểm</th>
+              <th>Bị đụng</th><th>Giờ vào</th><th>Về đích</th><th>Trạng thái</th><th>🎁 Quà</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-body"></tbody>
+        </table>
+      </div>
+      <div class="auto-note">Bảng tự cập nhật mỗi 2 giây · Dữ liệu lưu trong database của máy chủ</div>
+    </div>
+
+    <button id="logout" class="btn btn-small" hidden>🚪 Thoát Admin</button>
+  </div>
+
+  <script src="/js/admin.js?v=2"></script>
+</body>
+</html>

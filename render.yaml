@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: dem-hoi-trung-thu
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
+      - key: ADMIN_USER
+        value: Admin
+      - key: ADMIN_PASSWORD
+        value: "@Huyhandsome"
+      - key: SESSION_SECRET
+        generateValue: true
